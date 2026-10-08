@@ -282,6 +282,7 @@ function GmailPanel() {
   const [syncing, setSyncing] = React.useState(false);
   const [syncResult, setSyncResult] = React.useState(null);
   const [error, setError] = React.useState(null);
+  const restoreRef = React.useRef(null);
 
   const load = async () => {
     try { setStatus(await LU_API.get('/api/auth/google/status')); }
@@ -360,6 +361,16 @@ function GmailPanel() {
           </a>
         )}
         <Btn variant="ghost" onClick={() => LU_API.exportBackup()}>Download backup</Btn>
+        <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: 'none' }}
+          onChange={async (e) => {
+            const f = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            if (!window.confirm('Replace ALL your current Level Up data with this backup? This cannot be undone — download a backup first if unsure.')) return;
+            setError(null);
+            try { await LU_API.restoreBackup(f); } catch (err) { setError('Restore failed: ' + err.message); }
+          }}/>
+        <Btn variant="ghost" onClick={() => restoreRef.current && restoreRef.current.click()}>Restore from backup</Btn>
       </div>
 
       {syncResult && (

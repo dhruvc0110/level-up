@@ -774,6 +774,14 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     },
+    async restoreBackup(file) {
+      const incoming = normalizeDoc(await readJsonFile(file));
+      Object.keys(DOC).forEach((k) => { delete DOC[k]; });
+      Object.assign(DOC, incoming);
+      markDirty();
+      await flush();
+      window.location.reload();
+    },
     async reload() { await flush(); window.location.reload(); },
     signOut,
   };
