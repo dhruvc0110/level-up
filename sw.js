@@ -3,8 +3,10 @@
 //   - index.html / "./" → network-first, cache fallback
 //   - Own static files (.jsx, .js, .svg, .json) → cache-first, refreshed in background
 // Bump CACHE_NAME when shipping new static files.
+// All fetches skip the browser's HTTP cache (GitHub Pages sends max-age=600),
+// otherwise a new version can be filled with the previous version's files.
 
-const CACHE_NAME = 'levelup-gh-v3';
+const CACHE_NAME = 'levelup-gh-v4';
 const PRECACHE = [
   './', 'index.html', 'manifest.json', 'icon.svg', 'icon-maskable.svg', 'lu-store.js',
   'app.jsx', 'bits.jsx', 'brand.jsx', 'curator.jsx', 'dashboard.jsx', 'detail.jsx', 'inbox.jsx',
@@ -14,7 +16,7 @@ const PRECACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => Promise.allSettled(PRECACHE.map((u) => cache.add(u))))
+      .then((cache) => Promise.allSettled(PRECACHE.map((u) => cache.add(new Request(u, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
@@ -36,7 +38,7 @@ self.addEventListener('fetch', (event) => {
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
   if (isPage) {
     event.respondWith(
-      fetch(req).then((res) => {
+      fetch(req, { cache: 'no-cache' }).then((res) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((c) => c.put(req, copy));
         return res;
@@ -47,7 +49,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(req).then((cached) => {
-      const network = fetch(req).then((res) => {
+      const network = fetch(req, { cache: 'no-cache' }).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(req, copy)); }
         return res;
       }).catch(() => cached);
