@@ -384,8 +384,101 @@ function Select({ value, onChange, options, style }) {
   );
 }
 
+// ── Job intel (from the LinkedIn job page) ─────────────────────────────────
+const introLink = { color: 'var(--ink-1)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3 };
+
+function JobIntel({ enrichment }) {
+  if (!enrichment) return null;
+  const e = enrichment;
+  const hm = e.hiringManager;
+  const rows = [
+    ['Location', [e.location, e.workplace].filter(Boolean).join(' · ')],
+    ['Size', e.companySize ? e.companySize + (e.companySizeEstimated ? ' (estimate)' : '') : null],
+    ['Industry', e.industry],
+  ].filter(r => r[1]);
+  return (
+    <div style={{ border: '1px solid var(--line-1)', borderRadius: 3, padding: '12px 14px', background: 'var(--bg-2)' }}>
+      {e.summary && (
+        <div className="serif-italic" style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: rows.length || hm ? 10 : 0 }}>
+          {e.summary}
+        </div>
+      )}
+      {rows.map(([k, v]) => (
+        <div key={k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 10, fontSize: 12.5, padding: '3px 0' }}>
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingTop: 2 }}>{k}</span>
+          <span style={{ color: 'var(--ink-1)' }}>{v}</span>
+        </div>
+      ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 10, fontSize: 12.5, padding: '3px 0' }}>
+        <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingTop: 2 }}>Hiring mgr</span>
+        <span style={{ color: hm ? 'var(--ink-1)' : 'var(--ink-3)' }}>
+          {hm ? <>
+            {hm.url ? <a href={hm.url} target="_blank" rel="noopener noreferrer" style={introLink}>{hm.name}</a> : hm.name}
+            {hm.title && <span style={{ color: 'var(--ink-3)' }}> · {hm.title}</span>}
+            {hm.degree && <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginLeft: 8 }}>{hm.degree}</span>}
+          </> : 'Not named on the posting'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12 }}>
+        {e.jobUrl && <a href={e.jobUrl} target="_blank" rel="noopener noreferrer" style={introLink}>Job on LinkedIn ↗</a>}
+        {e.companyUrl && <a href={e.companyUrl} target="_blank" rel="noopener noreferrer" style={introLink}>Company on LinkedIn ↗</a>}
+      </div>
+    </div>
+  );
+}
+
+// ── People Dhruv knows at a company (from Network contacts) ────────────────
+function NetworkAt({ company, hiringManager }) {
+  const [showAll, setShowAll] = React.useState(false);
+  if (!window.LU_NETWORK_FOR) return null;
+  if (!company) return <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Add the company name to see who you know there.</div>;
+  const { atCompany, knowsHiringManager } = window.LU_NETWORK_FOR(company, hiringManager && hiringManager.name);
+  const list = showAll ? atCompany : atCompany.slice(0, 5);
+  const hasLinkedIn = (window.LU_CONTACTS || []).some(c => c.source === 'LinkedIn');
+  return (
+    <div>
+      {knowsHiringManager && (
+        <div style={{ fontSize: 12.5, color: 'var(--ink-1)', marginBottom: 8 }}>
+          You already know the hiring manager — <b>{knowsHiringManager.name}</b> is in your contacts.
+        </div>
+      )}
+      {atCompany.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+          No one in your contacts lists {company} as their company.
+          {!hasLinkedIn && ' Upload your LinkedIn connections in Settings to widen this.'}
+        </div>
+      ) : (
+        <div style={{ border: '1px solid var(--line-1)', borderRadius: 3 }}>
+          {list.map((c, i) => (
+            <div key={c.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              borderTop: i ? '1px solid var(--line-1)' : 'none', fontSize: 12.5,
+            }}>
+              <WarmthDot warmth={c.strength}/>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ color: 'var(--ink-1)' }}>
+                  {c.linkedinUrl ? <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" style={introLink}>{c.name}</a> : c.name}
+                </span>
+                {c.title && <span style={{ color: 'var(--ink-3)' }}> · {c.title}</span>}
+              </div>
+              {c.email && <a href={'mailto:' + c.email} style={{ ...introLink, fontSize: 11.5 }}>Email</a>}
+            </div>
+          ))}
+          {atCompany.length > 5 && (
+            <button onClick={() => setShowAll(!showAll)} style={{
+              width: '100%', padding: '7px 12px', background: 'transparent', border: 'none',
+              borderTop: '1px solid var(--line-1)', color: 'var(--ink-3)', fontSize: 12, textAlign: 'left', cursor: 'pointer',
+            }}>{showAll ? 'Show fewer' : `Show all ${atCompany.length}`}</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 Object.assign(window, {
   Icon, PersonaTag, PersonaDot, stageColor, StageBar,
   FitStars, DueChip, dueState, WarmthDot,
   Btn, Field, TextInput, TextArea, Select,
+  JobIntel, NetworkAt,
 });

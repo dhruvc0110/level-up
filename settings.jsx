@@ -589,20 +589,27 @@ function FuturePanelsHint() {
 
 // ── LinkedIn saved jobs (bookmark button) ───────────────────────────────
 
-// The bookmark runs on LinkedIn's page: it collects each job link plus the
-// text of its card and opens Level Up with the list after "#" (which stays in
-// the browser — it is never sent to GitHub or anyone else).
+// The bookmark runs on LinkedIn's page and opens Level Up with what it read
+// after "#" (which stays in the browser — never sent to GitHub or anyone else).
+//   - On a single job (…/jobs/view/123 or a list with ?currentJobId=123): sends that
+//     job's full page text + linked profiles → "lijob=" (enrichment).
+//   - On the Saved jobs list: sends each job link + its card text → "lijobs=".
 function buildLinkedInBookmarklet(appUrl) {
-  const code = `(()=>{const U=${JSON.stringify(appUrl + '#view=inbox&lijobs=')};`
-    + `if(!/(^|\\.)linkedin\\.com$|^localhost$/.test(location.hostname)){alert('Level Up: open your LinkedIn saved jobs first (My Jobs → Saved).');return}`
-    + `const r=/\\/jobs\\/view\\/(\\d+)/,idOf=a=>(a.href.match(r)||[])[1],seen={},jobs=[];`
-    + `(document.querySelector('main')||document).querySelectorAll('a[href*="/jobs/view/"]').forEach(a=>{const id=idOf(a);if(!id||seen[id])return;seen[id]=1;let c=a;`
+  const code = `(()=>{const B=${JSON.stringify(appUrl + '#view=inbox&')};`
+    + `if(!/(^|\\.)linkedin\\.com$|^localhost$/.test(location.hostname)){alert('Level Up: open LinkedIn first — your Saved jobs list, or a single job.');return}`
+    + `const r=/\\/jobs\\/view\\/(\\d+)/,idOf=a=>(a.href.match(r)||[])[1],go=u=>{if(!window.open(u,'levelup'))alert('Level Up: allow pop-ups for linkedin.com, then click again.')};`
+    + `const cur=(location.pathname.match(r)||[])[1]||new URLSearchParams(location.search).get('currentJobId');`
+    + `if(cur){const box=document.querySelector('.jobs-search__job-details--wrapper,.jobs-search__job-details--container,.jobs-details,.job-view-layout')||document.querySelector('main')||document.body;`
+    + `const ppl=[],sp={};box.querySelectorAll('a[href*="/in/"]').forEach(a=>{const u=a.href.split('?')[0];if(!/linkedin\\.com\\/in\\//.test(u)||sp[u])return;sp[u]=1;`
+    + `let c=a;for(let i=0;i<4&&c.parentElement&&c.innerText.length<60;i++)c=c.parentElement;ppl.push({url:u,text:(c.innerText||'').slice(0,200)})});`
+    + `const co=box.querySelector('a[href*="/company/"]');`
+    + `go(B+'lijob='+encodeURIComponent(JSON.stringify({id:cur,text:(box.innerText||'').slice(0,9000),people:ppl.slice(0,8),companyUrl:co?co.href:null})));return}`
+    + `const seen={},jobs=[];(document.querySelector('main')||document).querySelectorAll('a[href*="/jobs/view/"]').forEach(a=>{const id=idOf(a);if(!id||seen[id])return;seen[id]=1;let c=a;`
     + `for(let i=0;i<12&&c.parentElement&&c.parentElement!==document.body;i++){const p=c.parentElement,s=new Set();`
     + `p.querySelectorAll('a[href*="/jobs/view/"]').forEach(x=>s.add(idOf(x)));if(s.size>1||p.innerText.length>1500)break;c=p}`
     + `jobs.push({id,text:(c.innerText||a.innerText||'').slice(0,700)})});`
-    + `if(!jobs.length){alert('Level Up: no saved jobs found on this page. Open My Jobs → Saved and wait for the list to load.');return}`
-    + `const w=window.open(U+encodeURIComponent(JSON.stringify(jobs.slice(0,100))),'levelup');`
-    + `if(!w)alert('Level Up: allow pop-ups for linkedin.com, then click again.')})();`;
+    + `if(!jobs.length){alert('Level Up: no jobs found on this page. Open My Jobs → Saved (or a single job) and wait for it to load.');return}`
+    + `go(B+'lijobs='+encodeURIComponent(JSON.stringify(jobs.slice(0,100))))})();`;
   return 'javascript:' + encodeURIComponent(code);
 }
 
@@ -619,6 +626,7 @@ function LinkedInJobsPanel() {
     <>Show your bookmarks bar: <b style={{ color: 'var(--ink-1)' }}>Cmd+Shift+B</b>.</>,
     <>Drag the button below onto the bookmarks bar (one time).</>,
     <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. New jobs land in Inbox; ones already sent are skipped.</>,
+    <>For a job you're serious about, open the job itself and click the bookmark again: it adds company size, location, the hiring manager and how you're connected.</>,
   ];
 
   return (

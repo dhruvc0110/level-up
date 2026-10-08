@@ -216,6 +216,18 @@ function DetailContext({ opp, onUpdate }) {
         </div>
       </DetailField>
 
+      {/* From the LinkedIn job page (bookmark on a job page) */}
+      {opp.enrichment && (
+        <DetailField label="Job details">
+          <JobIntel enrichment={opp.enrichment}/>
+        </DetailField>
+      )}
+
+      {/* Warm paths */}
+      <DetailField label={`People you know at ${opp.company || 'this company'}`}>
+        <NetworkAt company={opp.company} hiringManager={opp.enrichment && opp.enrichment.hiringManager}/>
+      </DetailField>
+
       {/* Source */}
       <DetailField label="Source">
         <TextInput value={opp.source} onChange={(v) => update({ source: v })}/>
@@ -276,17 +288,6 @@ function DetailContext({ opp, onUpdate }) {
         <TextArea value={opp.notes} onChange={(v) => update({ notes: v })} rows={5}/>
       </DetailField>
 
-      {/* Activity timeline — placeholder content */}
-      <DetailField label="Activity">
-        <div style={{
-          fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6,
-        }}>
-          <ActivityLine when="3d ago" what="Stage moved to Applied"/>
-          <ActivityLine when="5d ago" what="AI draft generated (Email)"/>
-          <ActivityLine when="8d ago" what="Note added"/>
-          <ActivityLine when="2w ago" what="Opportunity created" last/>
-        </div>
-      </DetailField>
     </div>
   );
 }

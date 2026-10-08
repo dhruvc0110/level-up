@@ -39,12 +39,15 @@
   // The LinkedIn bookmark opens "#view=inbox&lijobs=<json>". Take the list and
   // strip it from the address bar before the app reads the hash. The part after
   // "#" never leaves the browser.
-  let PENDING_LINKEDIN = null;
+  // A single job page sends "#…&lijob=<json>" (one job, full page text) instead.
+  let PENDING_LINKEDIN = null, PENDING_LINKEDIN_DETAIL = null;
   (function takeLinkedInPayload() {
     const m = window.location.hash.match(/(?:^#|&)lijobs=([^&]*)/);
-    if (!m) return;
-    try { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) PENDING_LINKEDIN = j; } catch (e) { /* malformed */ }
-    const rest = window.location.hash.replace(/&?lijobs=[^&]*/, '').replace(/^#&/, '#');
+    const d = window.location.hash.match(/(?:^#|&)lijob=([^&]*)/);
+    if (!m && !d) return;
+    try { if (m) { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) PENDING_LINKEDIN = j; } } catch (e) { /* malformed */ }
+    try { if (d) { const j = JSON.parse(decodeURIComponent(d[1])); if (j && j.id) PENDING_LINKEDIN_DETAIL = j; } } catch (e) { /* malformed */ }
+    const rest = window.location.hash.replace(/&?lijobs?=[^&]*/g, '').replace(/^#&/, '#');
     history.replaceState(null, '', window.location.pathname + window.location.search + (rest === '#' ? '' : rest));
   })();
   const LS_TOKEN = 'lu_google_token';
@@ -572,7 +575,134 @@ Output a SINGLE JSON object, no prose around it:
     return { added, skipped, errors };
   }
 
+  // ── Enrich one job from its full LinkedIn page ──────────────────────────
+  const LINKEDIN_DETAIL_PROMPT = `You are reading the full LinkedIn job page for a role a senior technology executive is considering. They are exploring SIX career personas in parallel:
+
+${PERSONAS_FOR_PROMPT}
+
+You get the page text plus a list of LinkedIn profiles linked on the page (URL + nearby text). The hiring manager / poster usually appears under "Meet the hiring team" with a connection degree (1st, 2nd, 3rd).
+
+Output a SINGLE JSON object, no prose around it:
+
+{
+  "company": "Acme Corp" | null,
+  "role": "Chief Information Officer" | null,
+  "location": "Boston, MA" | null,
+  "workplace": "On-site" | "Hybrid" | "Remote" | null,
+  "company_size": "1,001-5,000 employees" | null,
+  "company_size_estimated": true | false,
+  "industry": "Hospital & Health Care" | null,
+  "hiring_manager": { "name": "...", "title": "...", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null } | null,
+  "summary": "max 35 words: the mandate in plain words (scope, scale, reporting line)",
+  "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
+  "fit": 1-5 | null,
+  "next_action": "short phrase" | null
+}
+
+Rules: company_size comes from the page ("About the company"); if absent, give your best estimate and set company_size_estimated true, or null if you don't know the company. hiring_manager only if the page names one; profile_url MUST be copied exactly from the provided list, else null. Never invent people.`;
+
+  const normCompany = (s) => String(s || '').toLowerCase()
+    .replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\b(the|inc|incorporated|llc|ltd|limited|plc|corp|corporation|co|company|group|holdings|lp|llp|gmbh|sa|ag)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Who in Dhruv's contacts works at this company / is this person.
+  function networkFor(company, hiringManagerName) {
+    const target = normCompany(company);
+    const atCompany = [];
+    if (target.length >= 3) {
+      for (const c of DOC.contacts) {
+        const n = normCompany(c.company);
+        if (!n) continue;
+        const match = n === target
+          || (Math.min(n.length, target.length) >= 4 && (n.startsWith(target + ' ') || target.startsWith(n + ' ')));
+        if (match) atCompany.push(c);
+      }
+    }
+    const rank = { strong: 0, warm: 1, cold: 2 };
+    atCompany.sort((a, b) => (rank[a.strength] ?? 3) - (rank[b.strength] ?? 3)
+      || String(b.lastContactedAt || '').localeCompare(String(a.lastContactedAt || '')));
+    const hm = normName(hiringManagerName);
+    const knowsHiringManager = hm ? DOC.contacts.find((c) => normName(c.name) === hm) || null : null;
+    return { atCompany, knowsHiringManager };
+  }
+
+  async function enrichLinkedInJob(job) {
+    const jobId = String(job && job.id || '').replace(/\D/g, '');
+    if (!jobId) throw new Error('No job id on that page.');
+    const people = (Array.isArray(job.people) ? job.people : []).slice(0, 8)
+      .map((p) => ({ url: String(p.url || '').split('?')[0], text: String(p.text || '').slice(0, 200) }))
+      .filter((p) => /^https:\/\/www\.linkedin\.com\/in\//.test(p.url));
+    const text = String(job.text || '').slice(0, 9000);
+    const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
+    pill('Reading the job page…');
+    const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
+    const resp = await claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 900);
+    const d = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+    let hm = d.hiring_manager && d.hiring_manager.name ? d.hiring_manager : null;
+    if (hm && !people.some((p) => p.url === String(hm.profile_url || '').split('?')[0])) hm = { ...hm, profile_url: null };
+    const companyUrl = /^https:\/\/www\.linkedin\.com\/company\//.test(job.companyUrl || '') ? String(job.companyUrl).split('?')[0] : null;
+    const enrichment = {
+      location: d.location || null, workplace: d.workplace || null,
+      companySize: d.company_size || null, companySizeEstimated: !!d.company_size_estimated,
+      industry: d.industry || null, summary: d.summary || null, companyUrl, jobUrl,
+      hiringManager: hm ? { name: hm.name, title: hm.title || '', url: hm.profile_url || null, degree: hm.degree || null } : null,
+      enrichedAt: nowIso(),
+    };
+    const hmContact = hm ? { name: hm.name, title: hm.title || '', warmth: hm.degree === '1st' ? 'warm' : 'cold' } : null;
+
+    const id = 'li-' + jobId;
+    let row = DOC.triage.find((t) => t.id === id);
+    if (!row) {
+      row = {
+        id, kind: 'linkedin', jobUrl, fromAddress: 'LinkedIn · saved job', fromName: 'LinkedIn',
+        subject: d.role || 'LinkedIn job', snippet: [d.role, d.company, d.location].filter(Boolean).join(' · '), bodyText: text.slice(0, 4000),
+        receivedAt: nowIso(), parseStatus: 'parsed', triageStatus: 'pending', opportunityId: null, errorMessage: null,
+        createdAt: nowIso(), triagedAt: null,
+        parsed: { is_opportunity: true, confidence: 4, reasoning: 'Read from the full LinkedIn job page.',
+          company: d.company || null, role: d.role || null, contact: hmContact, persona: d.persona || null,
+          fit: d.fit || null, next_action: d.next_action || null, notes: d.summary || null },
+      };
+      DOC.triage.unshift(row);
+    } else {
+      const p = row.parsed || (row.parsed = { is_opportunity: true });
+      if (!p.company && d.company) p.company = d.company;
+      if (!p.role && d.role) p.role = d.role;
+      if (!p.contact && hmContact) p.contact = hmContact;
+      if (!p.notes && d.summary) p.notes = d.summary;
+      if (row.parseStatus !== 'parsed') { row.parseStatus = 'parsed'; p.is_opportunity = true; }
+    }
+    row.enrichment = enrichment;
+    row.parsedAt = nowIso();
+
+    let opp = row.opportunityId ? DOC.opportunities.find((o) => o.id === row.opportunityId) : null;
+    if (opp) {
+      opp.enrichment = enrichment;
+      if ((!opp.contact || !opp.contact.name) && hmContact) opp.contact = hmContact;
+      notifyOpportunities();
+    }
+    markDirty();
+    await flush();
+    return { row, opp, enrichment };
+  }
+
+  async function importPendingLinkedInDetail() {
+    if (!PENDING_LINKEDIN_DETAIL) return;
+    const job = PENDING_LINKEDIN_DETAIL; PENDING_LINKEDIN_DETAIL = null;
+    try {
+      const { row, opp } = await enrichLinkedInJob(job);
+      const what = [(row.parsed && row.parsed.role), (row.parsed && row.parsed.company)].filter(Boolean).join(' at ') || 'job';
+      pill(opp ? `Updated in Pipeline: ${what}` : `Enriched in Inbox: ${what}`);
+      window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+      if (opp) window.dispatchEvent(new CustomEvent('lu:open-opp', { detail: opp.id }));
+    } catch (err) {
+      pill('LinkedIn enrichment failed — ' + err.message, 'error');
+    }
+  }
+
   async function importPendingLinkedIn() {
+    importPendingLinkedInDetail();
     if (!PENDING_LINKEDIN) return;
     const jobs = PENDING_LINKEDIN; PENDING_LINKEDIN = null;
     try {
@@ -816,6 +946,7 @@ Output a SINGLE JSON object, no prose around it:
           nextAction: b.nextAction || '', dueDate: b.dueDate || '', notes: b.notes || '', drafts: [],
         };
         if (row.jobUrl && !opp.notes.includes(row.jobUrl)) opp.notes = (opp.notes ? opp.notes + '\n\n' : '') + 'LinkedIn: ' + row.jobUrl;
+        if (row.enrichment) opp.enrichment = row.enrichment;
         DOC.opportunities.unshift(opp);
         row.triageStatus = 'accepted'; row.opportunityId = opp.id; row.triagedAt = nowIso();
         markDirty(); notifyOpportunities();
@@ -857,6 +988,8 @@ Output a SINGLE JSON object, no prose around it:
 
     throw new Error(`No handler for ${method} /api/${p}`);
   }
+
+  window.LU_NETWORK_FOR = networkFor;
 
   window.LU_API = {
     get:    (path)       => route('GET', path),

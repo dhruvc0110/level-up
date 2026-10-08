@@ -325,6 +325,24 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
         )}
       </div>
 
+      {item.enrichment && (
+        <div style={{ marginBottom: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>Job details</div>
+          <JobIntel enrichment={item.enrichment}/>
+        </div>
+      )}
+      {item.kind === 'linkedin' && !item.enrichment && (
+        <div style={{ fontSize: 12, color: 'var(--ink-3)', margin: '-6px 0 16px' }}>
+          Want size, hiring manager and more? Open the job on LinkedIn and click the Sync to Level Up bookmark there.
+        </div>
+      )}
+      {draft.company && (
+        <div style={{ marginBottom: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>People you know at {draft.company}</div>
+          <NetworkAt company={draft.company} hiringManager={item.enrichment && item.enrichment.hiringManager}/>
+        </div>
+      )}
+
       {/* Editable fields */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         <Field label="Company">

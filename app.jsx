@@ -37,6 +37,14 @@ function App() {
     return () => window.removeEventListener('lu:opportunities-changed', onChange);
   }, []);
 
+  // LinkedIn enrichment of an accepted job opens that opportunity.
+  React.useEffect(() => {
+    const onOpen = (e) => pushNav({ view: 'pipeline', openOppId: e.detail, addOpen: false, curatorPersonaId: null });
+    window.addEventListener('lu:open-opp', onOpen);
+    return () => window.removeEventListener('lu:open-opp', onOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Apply aesthetic tweak via CSS class on body
   React.useEffect(() => {
     document.body.dataset.aesthetic = t.aesthetic;
