@@ -12,6 +12,7 @@ function SettingsView() {
         <div style={{ maxWidth: 760 }}>
           <AnthropicKeyPanel/>
           <GmailPanel/>
+          <LinkedInJobsPanel/>
           <LinkedInPanel/>
           {/* Future: RssWatchlistPanel, AccountPanel */}
           <FuturePanelsHint/>
@@ -581,8 +582,68 @@ function FuturePanelsHint() {
       marginTop: 8,
     }}>
       <div className="eyebrow" style={{ marginBottom: 8, color: 'var(--ink-4)' }}>Coming next</div>
-      Gmail correspondent mining · Per-opportunity warm-path workflow · LinkedIn Jobs bookmarklet · Real Claude outreach drafts. Each will get a panel here.
+      Gmail correspondent mining · Per-opportunity warm-path workflow · Real Claude outreach drafts. Each will get a panel here.
     </section>
+  );
+}
+
+// ── LinkedIn saved jobs (bookmark button) ───────────────────────────────
+
+// The bookmark runs on LinkedIn's page: it collects each job link plus the
+// text of its card and opens Level Up with the list after "#" (which stays in
+// the browser — it is never sent to GitHub or anyone else).
+function buildLinkedInBookmarklet(appUrl) {
+  const code = `(()=>{const U=${JSON.stringify(appUrl + '#view=inbox&lijobs=')};`
+    + `if(!/(^|\\.)linkedin\\.com$|^localhost$/.test(location.hostname)){alert('Level Up: open your LinkedIn saved jobs first (My Jobs → Saved).');return}`
+    + `const r=/\\/jobs\\/view\\/(\\d+)/,idOf=a=>(a.href.match(r)||[])[1],seen={},jobs=[];`
+    + `(document.querySelector('main')||document).querySelectorAll('a[href*="/jobs/view/"]').forEach(a=>{const id=idOf(a);if(!id||seen[id])return;seen[id]=1;let c=a;`
+    + `for(let i=0;i<12&&c.parentElement&&c.parentElement!==document.body;i++){const p=c.parentElement,s=new Set();`
+    + `p.querySelectorAll('a[href*="/jobs/view/"]').forEach(x=>s.add(idOf(x)));if(s.size>1||p.innerText.length>1500)break;c=p}`
+    + `jobs.push({id,text:(c.innerText||a.innerText||'').slice(0,700)})});`
+    + `if(!jobs.length){alert('Level Up: no saved jobs found on this page. Open My Jobs → Saved and wait for the list to load.');return}`
+    + `const w=window.open(U+encodeURIComponent(JSON.stringify(jobs.slice(0,100))),'levelup');`
+    + `if(!w)alert('Level Up: allow pop-ups for linkedin.com, then click again.')})();`;
+  return 'javascript:' + encodeURIComponent(code);
+}
+
+function LinkedInJobsPanel() {
+  const linkRef = React.useRef(null);
+  const appUrl = window.location.origin + window.location.pathname + (window.LU_USER && window.LU_USER.localMode ? '?local=1' : '');
+  const saved = (window.LU_TRIAGE || []).filter(t => t.kind === 'linkedin').length;
+  // Set href directly: React warns about javascript: URLs passed as props.
+  React.useEffect(() => {
+    if (linkRef.current) linkRef.current.setAttribute('href', buildLinkedInBookmarklet(appUrl));
+  }, []);
+
+  const steps = [
+    <>Show your bookmarks bar: <b style={{ color: 'var(--ink-1)' }}>Cmd+Shift+B</b>.</>,
+    <>Drag the button below onto the bookmarks bar (one time).</>,
+    <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. New jobs land in Inbox; ones already sent are skipped.</>,
+  ];
+
+  return (
+    <SettingsPanel title="LinkedIn saved jobs" eyebrow="DATA · LINKEDIN JOBS">
+      <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 14px', textWrap: 'pretty' }}>
+        LinkedIn has no way for apps to read your saved jobs, so this is a one-click button you press while you're on
+        LinkedIn. It only reads the page you're looking at — nothing logs in as you. Works in desktop Chrome.
+      </p>
+      <ol style={{ margin: '0 0 16px', paddingLeft: 20, color: 'var(--ink-2)', fontSize: 13.5, lineHeight: 1.7 }}>
+        {steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <a ref={linkRef} onClick={(e) => { e.preventDefault(); alert('Drag this button to your bookmarks bar, then click it on LinkedIn.'); }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 14px',
+            border: '1px solid var(--line-2)', borderRadius: 3, background: 'var(--bg-2)',
+            color: 'var(--ink-1)', fontSize: 13, textDecoration: 'none', cursor: 'grab',
+          }}>
+          <Icon name="spark" size={13}/> Sync to Level Up
+        </a>
+        <span style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: '0.04em' }}>
+          {saved} LinkedIn job{saved === 1 ? '' : 's'} received so far
+        </span>
+      </div>
+    </SettingsPanel>
   );
 }
 

@@ -35,6 +35,18 @@
 
   const params = new URLSearchParams(window.location.search);
   const LOCAL_MODE = params.get('local') === '1';
+
+  // The LinkedIn bookmark opens "#view=inbox&lijobs=<json>". Take the list and
+  // strip it from the address bar before the app reads the hash. The part after
+  // "#" never leaves the browser.
+  let PENDING_LINKEDIN = null;
+  (function takeLinkedInPayload() {
+    const m = window.location.hash.match(/(?:^#|&)lijobs=([^&]*)/);
+    if (!m) return;
+    try { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) PENDING_LINKEDIN = j; } catch (e) { /* malformed */ }
+    const rest = window.location.hash.replace(/&?lijobs=[^&]*/, '').replace(/^#&/, '#');
+    history.replaceState(null, '', window.location.pathname + window.location.search + (rest === '#' ? '' : rest));
+  })();
   const LS_TOKEN = 'lu_google_token';
   const LS_LOCAL_DOC = 'lu_local_doc';
 
@@ -492,6 +504,87 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  // LinkedIn saved jobs (sent by the "Sync to Level Up" bookmark button)
+  // ════════════════════════════════════════════════════════════════════════
+
+  const LINKEDIN_SYSTEM_PROMPT = `You are reading LinkedIn job postings that a senior technology executive SAVED. They are exploring SIX career personas in parallel:
+
+${PERSONAS_FOR_PROMPT}
+
+Each input is the text of one saved-job card (title, company, location, sometimes posting age or applicant count). Treat it as an opportunity (is_opportunity true) unless it is clearly not a job. contact is the poster or recruiter only if named, else null. Pick the best-fitting persona and rate fit 1-5 for a senior executive.
+
+Output a SINGLE JSON object, no prose around it:
+
+{
+  "is_opportunity": true | false,
+  "confidence": 1-5,
+  "reasoning": "one short sentence",
+  "company": "Acme Corp" | null,
+  "role": "Chief Information Officer" | null,
+  "contact": { "name": "...", "title": "...", "warmth": "recruiter" } | null,
+  "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
+  "fit": 1-5 | null,
+  "next_action": "short phrase" | null,
+  "notes": "location and any other useful detail" | null
+}`;
+
+  // Fallback when Claude is unavailable: LinkedIn cards read "Title\nCompany\nLocation…"
+  function guessFromCard(lines) {
+    const clean = lines.filter((l) => !/^(verified|promoted|saved|viewed|applied|easy apply|actively|be an early)/i.test(l));
+    return { role: clean[0] || null, company: clean[1] || null, notes: clean.slice(2, 4).join(' · ') || null };
+  }
+
+  async function importLinkedInJobs(jobs) {
+    const seen = new Set(DOC.triage.map((t) => t.id));
+    let added = 0, skipped = 0;
+    const errors = [];
+    for (const j of (jobs || []).slice(0, 100)) {
+      const jobId = String(j && j.id || '').replace(/\D/g, '');
+      if (!jobId) continue;
+      const id = 'li-' + jobId;
+      if (seen.has(id)) { skipped++; continue; }
+      seen.add(id);
+      const text = String(j.text || '').slice(0, 1500);
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
+      const row = {
+        id, kind: 'linkedin', jobUrl, fromAddress: 'LinkedIn · saved job', fromName: 'LinkedIn',
+        subject: lines[0] || 'Saved job', snippet: lines.slice(0, 4).join(' · '), bodyText: text,
+        receivedAt: nowIso(), parsed: null, parseStatus: 'pending', triageStatus: 'pending',
+        opportunityId: null, errorMessage: null, createdAt: nowIso(), parsedAt: null, triagedAt: null,
+      };
+      DOC.triage.unshift(row);
+      added++;
+      pill(`Reading LinkedIn job ${added}…`);
+      try {
+        const resp = await claude(CONFIG.parseModel, LINKEDIN_SYSTEM_PROMPT, `${text}\n\nLink: ${jobUrl}`, 600);
+        row.parsed = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+      } catch (e) {
+        const g = guessFromCard(lines);
+        row.parsed = { is_opportunity: true, confidence: 1, reasoning: 'Claude unavailable (' + String(e.message || e).slice(0, 120) + ') — filled from the card text.', ...g, contact: null, persona: null, fit: null, next_action: null };
+        errors.push(String(e.message || e).slice(0, 200));
+      }
+      row.parseStatus = row.parsed.is_opportunity ? 'parsed' : 'not_opportunity';
+      row.parsedAt = nowIso();
+      markDirty();
+    }
+    await flush();
+    return { added, skipped, errors };
+  }
+
+  async function importPendingLinkedIn() {
+    if (!PENDING_LINKEDIN) return;
+    const jobs = PENDING_LINKEDIN; PENDING_LINKEDIN = null;
+    try {
+      const r = await importLinkedInJobs(jobs);
+      pill(r.added ? `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'} in Inbox` + (r.skipped ? ` · ${r.skipped} already here` : '') : `No new jobs · ${r.skipped} already in Level Up`);
+      window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+    } catch (err) {
+      pill('LinkedIn import failed — ' + err.message, 'error');
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // Google Contacts + Calendar
   // ════════════════════════════════════════════════════════════════════════
   async function syncContacts() {
@@ -722,6 +815,7 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
           persona: b.persona || null, fit: b.fit || null, source: b.source || 'Gmail', contact: b.contact || null,
           nextAction: b.nextAction || '', dueDate: b.dueDate || '', notes: b.notes || '', drafts: [],
         };
+        if (row.jobUrl && !opp.notes.includes(row.jobUrl)) opp.notes = (opp.notes ? opp.notes + '\n\n' : '') + 'LinkedIn: ' + row.jobUrl;
         DOC.opportunities.unshift(opp);
         row.triageStatus = 'accepted'; row.opportunityId = opp.id; row.triagedAt = nowIso();
         markDirty(); notifyOpportunities();
@@ -886,6 +980,7 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
       publishGlobals();
       window.addEventListener('lu:opportunities-changed', publishGlobals);
       document.getElementById('root').innerHTML = '';
+      importPendingLinkedIn();
     } catch (err) {
       console.error('[Level Up] bootstrap failed:', err);
       if (!LOCAL_MODE && (err.status === 401 || err.status === 403)) localStorage.removeItem(LS_TOKEN);

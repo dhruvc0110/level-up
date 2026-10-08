@@ -17,7 +17,11 @@ function InboxView({ onOpenOpp, onNavSettings }) {
       setError(e.message);
     }
   };
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => {
+    load();
+    window.addEventListener('lu:inbox-changed', load);
+    return () => window.removeEventListener('lu:inbox-changed', load);
+  }, []);
 
   const sync = async () => {
     setSyncing(true); setError(null);
@@ -274,7 +278,7 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
         stage: draft.stage,
         persona: draft.persona || null,
         fit: draft.fit || null,
-        source: 'Gmail · ' + (item.fromName || item.fromAddress.split('@')[0]),
+        source: item.kind === 'linkedin' ? 'LinkedIn · saved job' : 'Gmail · ' + (item.fromName || item.fromAddress.split('@')[0]),
         contact: draft.contact && draft.contact.name ? draft.contact : null,
         nextAction: draft.nextAction || null,
         notes: draft.notes || null,
@@ -288,7 +292,7 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
   };
 
   const reject = async () => {
-    if (!window.confirm('Reject this email? It will be marked dismissed (kept in the database for audit).')) return;
+    if (!window.confirm(`Reject this ${item.kind === 'linkedin' ? 'job' : 'email'}? It will be marked dismissed (kept for audit).`)) return;
     setBusy(true); setError(null);
     try {
       await LU_API.post('/api/inbox/' + item.id + '/reject', {});
@@ -304,10 +308,16 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
     <div style={{ padding: '4px 18px 18px', borderTop: '1px solid var(--line-1)' }}>
       {/* Original email preview */}
       <div style={{ margin: '14px 0 18px', padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 3, border: '1px solid var(--line-1)' }}>
-        <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>Original snippet</div>
+        <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>{item.kind === 'linkedin' ? 'Saved on LinkedIn' : 'Original snippet'}</div>
         <div className="serif-italic" style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           "{item.snippet}…"
         </div>
+        {item.jobUrl && (
+          <a href={item.jobUrl} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', marginTop: 8, fontSize: 12.5, color: 'var(--ink-1)' }}>
+            View job on LinkedIn ↗
+          </a>
+        )}
         {parsed.reasoning && (
           <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8 }}>
             <b style={{ color: 'var(--ink-2)' }}>Claude:</b> {parsed.reasoning}
