@@ -283,6 +283,7 @@ function GmailPanel() {
   const [syncResult, setSyncResult] = React.useState(null);
   const [error, setError] = React.useState(null);
   const restoreRef = React.useRef(null);
+  const sample = LU_API.sampleCounts();
 
   const load = async () => {
     try { setStatus(await LU_API.get('/api/auth/google/status')); }
@@ -371,6 +372,13 @@ function GmailPanel() {
             try { await LU_API.restoreBackup(f); } catch (err) { setError('Restore failed: ' + err.message); }
           }}/>
         <Btn variant="ghost" onClick={() => restoreRef.current && restoreRef.current.click()}>Restore from backup</Btn>
+        {sample.opportunities + sample.posts > 0 && (
+          <Btn variant="ghost" onClick={async () => {
+            if (!window.confirm(`Remove the sample data from the original demo — ${sample.opportunities} opportunities and ${sample.posts} Brand posts? Your contacts, personas, inbox and any opportunities you accepted from Inbox are kept.`)) return;
+            setError(null);
+            try { await LU_API.removeSampleData(); } catch (err) { setError('Remove failed: ' + err.message); }
+          }}>Remove sample data</Btn>
+        )}
       </div>
 
       {syncResult && (

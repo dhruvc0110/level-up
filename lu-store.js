@@ -58,6 +58,9 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  const SAMPLE_OPP = /^op-\d{2}$/;
+  const SAMPLE_POST = /^p-\d{2}$/;
+
   function emptyDoc() {
     return {
       app: 'level-up', version: 1,
@@ -337,6 +340,7 @@
     window.LU_CONTACTS = DOC.contacts;
     window.LU_POSTS = DOC.posts;
     window.LU_THEMES = DOC.themes;
+    window.LU_TRIAGE = DOC.triage;
     DOC.personas.forEach((p) => { p.opportunities = DOC.opportunities.filter((o) => o.persona === p.id).length; });
   }
   function notifyOpportunities() {
@@ -778,6 +782,21 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
       const incoming = normalizeDoc(await readJsonFile(file));
       Object.keys(DOC).forEach((k) => { delete DOC[k]; });
       Object.assign(DOC, incoming);
+      markDirty();
+      await flush();
+      window.location.reload();
+    },
+    // Demo rows shipped with the original prototype: op-01…op-25, p-01…p-12.
+    // Real opportunities from Inbox are "op-g<timestamp>", so they never match.
+    sampleCounts() {
+      return {
+        opportunities: DOC.opportunities.filter((o) => SAMPLE_OPP.test(o.id)).length,
+        posts: DOC.posts.filter((p) => SAMPLE_POST.test(p.id)).length,
+      };
+    },
+    async removeSampleData() {
+      DOC.opportunities = DOC.opportunities.filter((o) => !SAMPLE_OPP.test(o.id));
+      DOC.posts = DOC.posts.filter((p) => !SAMPLE_POST.test(p.id));
       markDirty();
       await flush();
       window.location.reload();

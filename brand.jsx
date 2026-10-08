@@ -132,8 +132,10 @@ function ConsistencyModule({ posts }) {
   const dates = published.map(p => new Date(p.date)).sort((a, b) => a - b);
   let totalGap = 0;
   for (let i = 1; i < dates.length; i++) totalGap += (dates[i] - dates[i-1]) / (1000 * 60 * 60 * 24);
-  const avgCadence = dates.length > 1 ? (totalGap / (dates.length - 1)).toFixed(1) : '—';
-  const score = Math.min(100, 60 + published.length * 6);
+  const avgCadence = dates.length > 1 ? (totalGap / (dates.length - 1)).toFixed(1) + 'd' : '—';
+  const last30 = published.filter(p => (Date.now() - new Date(p.date)) / 86400000 <= 30).length;
+  const score = published.length ? Math.min(100, 60 + last30 * 6) : 0;
+  const verdict = !published.length ? 'Not started yet.' : last30 === 0 ? 'Gone quiet.' : score >= 80 ? 'Compounding nicely.' : 'Building.';
 
   return (
     <div style={{
@@ -153,7 +155,7 @@ function ConsistencyModule({ posts }) {
         <span className="serif-italic" style={{
           fontSize: 14, color: 'var(--ink-3)', marginLeft: 'auto',
         }}>
-          Compounding nicely.
+          {verdict}
         </span>
       </div>
 
@@ -161,8 +163,8 @@ function ConsistencyModule({ posts }) {
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
         borderTop: '1px solid var(--line-1)', paddingTop: 12, gap: 0,
       }}>
-        <ConsStat label="Cadence"  value={`${avgCadence}d`} hint="avg gap"/>
-        <ConsStat label="Posts/mo" value={published.length} hint="last 30d" divider/>
+        <ConsStat label="Cadence"  value={avgCadence} hint="avg gap"/>
+        <ConsStat label="Posts/mo" value={last30} hint="last 30d" divider/>
         <ConsStat label="Avg impr." value={`${(avgImp/1000).toFixed(1)}k`} divider/>
         <ConsStat label="Reactions" value={totalReactions} divider/>
       </div>

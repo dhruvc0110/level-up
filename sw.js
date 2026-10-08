@@ -4,7 +4,7 @@
 //   - Own static files (.jsx, .js, .svg, .json) → cache-first, refreshed in background
 // Bump CACHE_NAME when shipping new static files.
 
-const CACHE_NAME = 'levelup-gh-v2';
+const CACHE_NAME = 'levelup-gh-v3';
 const PRECACHE = [
   './', 'index.html', 'manifest.json', 'icon.svg', 'icon-maskable.svg', 'lu-store.js',
   'app.jsx', 'bits.jsx', 'brand.jsx', 'curator.jsx', 'dashboard.jsx', 'detail.jsx', 'inbox.jsx',

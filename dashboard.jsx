@@ -75,6 +75,25 @@ function DashboardHeader({ opps, onAdd }) {
   const overdue = opps.filter(o => dueState(o.dueDate)?.kind === 'overdue').length;
   const today = opps.filter(o => dueState(o.dueDate)?.kind === 'today').length;
 
+  const now = new Date();
+  const dateLine = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    .replace(/,/g, '').replace(/^(\S+) /, '$1 · ') + ' · Week ' + isoWeek(now);
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning.' : hour < 18 ? 'Good afternoon.' : 'Good evening.';
+  const dueThisWeek = opps.filter(o => {
+    const k = dueState(o.dueDate)?.kind;
+    if (k === 'today') return true;
+    if (!o.dueDate || k === 'overdue') return false;
+    const days = (new Date(o.dueDate) - now) / 86400000;
+    return days >= 0 && days <= 7;
+  }).length;
+  const NUM = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+  const n = (k) => NUM[k] || String(k);
+  const subline = opps.length === 0 ? 'Your pipeline is empty — add the first opportunity.'
+    : overdue > 0 ? `${n(overdue)} ${overdue === 1 ? 'item is' : 'items are'} overdue.`
+    : dueThisWeek > 0 ? `${n(dueThisWeek)} ${dueThisWeek === 1 ? 'action' : 'actions'} due this week.`
+    : 'Nothing due this week.';
+
   return (
     <div style={{
       padding: '20px 28px 18px',
@@ -84,14 +103,14 @@ function DashboardHeader({ opps, onAdd }) {
     }}>
       <div>
         <div className="eyebrow" style={{ marginBottom: 6 }}>
-          Friday · 23 May 2026 · Week 21
+          {dateLine}
         </div>
         <h1 className="serif" style={{
           margin: 0, fontSize: 32, fontWeight: 400, letterSpacing: '-0.02em',
           color: 'var(--ink-1)',
         }}>
-          Good morning. <span className="serif-italic" style={{ color: 'var(--ink-3)' }}>
-            Two decisions due before the weekend.
+          {greeting} <span className="serif-italic" style={{ color: 'var(--ink-3)' }}>
+            {subline}
           </span>
         </h1>
       </div>
@@ -104,6 +123,14 @@ function DashboardHeader({ opps, onAdd }) {
       </div>
     </div>
   );
+}
+
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t - yearStart) / 86400000 + 1) / 7);
 }
 
 function Counter({ label, value, kind = 'normal' }) {
@@ -325,12 +352,24 @@ function ThisWeekModule({ opps, onOpen }) {
 
 // ── 4. Momentum module ─────────────────────────────────────────────────────
 function MomentumModule({ opps }) {
-  // Made-up activity counts per recent day
-  const days = [
-    { label: 'M', n: 3 }, { label: 'T', n: 5 }, { label: 'W', n: 4 },
-    { label: 'T', n: 7 }, { label: 'F', n: 6 }, { label: 'S', n: 1 }, { label: 'S', n: 0 },
-  ];
-  const max = Math.max(...days.map(d => d.n));
+  // Real activity: inbox decisions + calendar meetings (each contact's latest), per day
+  const stamps = [
+    ...(window.LU_TRIAGE || []).map(t => t.triagedAt),
+    ...(window.LU_CONTACTS || []).map(c => c.lastContactedAt),
+  ].filter(Boolean).map(s => new Date(s)).filter(d => !isNaN(d) && d <= new Date());
+  const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
+  const todayStart = startOfDay(new Date());
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const dayStart = todayStart - (6 - i) * 86400000;
+    return {
+      label: new Date(dayStart).toLocaleDateString('en-GB', { weekday: 'narrow' }),
+      n: stamps.filter(d => startOfDay(d) === dayStart).length,
+    };
+  });
+  const total = days.reduce((s, d) => s + d.n, 0);
+  const prev = stamps.filter(d => { const t = startOfDay(d); return t < todayStart - 6 * 86400000 && t >= todayStart - 13 * 86400000; }).length;
+  const change = prev > 0 ? Math.round(((total - prev) / prev) * 100) : null;
+  const max = Math.max(1, ...days.map(d => d.n));
 
   return (
     <Module eyebrow="Momentum" title="Activity, last 7 days">
@@ -341,7 +380,7 @@ function MomentumModule({ opps }) {
                                   alignItems: 'center', gap: 6 }}>
             <div style={{
               width: '100%', height: `${(d.n / max) * 100}%`,
-              background: i === 4 ? 'var(--ink-1)' : 'var(--ink-4)',
+              background: i === 6 ? 'var(--ink-1)' : 'var(--ink-4)',
               borderRadius: 1, minHeight: 2,
               transition: 'height .35s',
             }}/>
@@ -353,9 +392,11 @@ function MomentumModule({ opps }) {
         marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line-1)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
       }}>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>26 actions logged</span>
+        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+          {total} {total === 1 ? 'action' : 'actions'} · inbox + meetings
+        </span>
         <span className="serif-italic" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-          +18% vs. last week
+          {change === null ? (total ? 'First active week' : 'Quiet week') : `${change >= 0 ? '+' : ''}${change}% vs. last week`}
         </span>
       </div>
     </Module>
