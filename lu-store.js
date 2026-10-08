@@ -528,8 +528,14 @@ Output a SINGLE JSON object, no prose around it:
   "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null,
-  "notes": "location and any other useful detail" | null
-}`;
+  "notes": "any other useful detail from the card" | null,
+  "location": "Boston, MA" | null,
+  "workplace": "On-site" | "Hybrid" | "Remote" | null,
+  "company_size": "your best estimate, e.g. 1,001-5,000 employees" | null,
+  "industry": "e.g. Hospital & Health Care" | null
+}
+
+company_size and industry come from what you know about the company; use null if you don't recognise it.`;
 
   // Fallback when Claude is unavailable: LinkedIn cards read "Title\nCompany\nLocation…"
   function guessFromCard(lines) {
@@ -538,15 +544,27 @@ Output a SINGLE JSON object, no prose around it:
   }
 
   async function importLinkedInJobs(jobs) {
-    const seen = new Set(DOC.triage.map((t) => t.id));
-    let added = 0, skipped = 0;
+    let added = 0, enriched = 0, skipped = 0, n = 0;
     const errors = [];
     for (const j of (jobs || []).slice(0, 100)) {
       const jobId = String(j && j.id || '').replace(/\D/g, '');
       if (!jobId) continue;
       const id = 'li-' + jobId;
-      if (seen.has(id)) { skipped++; continue; }
-      seen.add(id);
+      const detail = j.detail && j.detail.text ? Object.assign({}, j.detail, { id: jobId }) : null;
+      const existing = DOC.triage.find((t) => t.id === id);
+      if (existing) {
+        // Already here: only worth touching if we now have its full page.
+        if (detail && (!existing.enrichment || existing.enrichment.partial)) {
+          pill(`Reading LinkedIn job ${++n}…`);
+          try { await enrichLinkedInJob(detail); enriched++; } catch (e) { errors.push(String(e.message || e).slice(0, 200)); }
+        } else skipped++;
+        continue;
+      }
+      pill(`Reading LinkedIn job ${++n}…`);
+      if (detail) {
+        try { await enrichLinkedInJob(detail); added++; enriched++; continue; }
+        catch (e) { errors.push(String(e.message || e).slice(0, 200)); /* fall back to the card */ }
+      }
       const text = String(j.text || '').slice(0, 1500);
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
       const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
@@ -558,10 +576,16 @@ Output a SINGLE JSON object, no prose around it:
       };
       DOC.triage.unshift(row);
       added++;
-      pill(`Reading LinkedIn job ${added}…`);
       try {
         const resp = await claude(CONFIG.parseModel, LINKEDIN_SYSTEM_PROMPT, `${text}\n\nLink: ${jobUrl}`, 600);
         row.parsed = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+        const d = row.parsed;
+        // Card-only: what Claude can add without the job page. Marked partial.
+        row.enrichment = {
+          partial: true, location: d.location || null, workplace: d.workplace || null,
+          companySize: d.company_size || null, companySizeEstimated: true, industry: d.industry || null,
+          summary: null, hiringManager: null, companyUrl: null, jobUrl, enrichedAt: nowIso(),
+        };
       } catch (e) {
         const g = guessFromCard(lines);
         row.parsed = { is_opportunity: true, confidence: 1, reasoning: 'Claude unavailable (' + String(e.message || e).slice(0, 120) + ') — filled from the card text.', ...g, contact: null, persona: null, fit: null, next_action: null };
@@ -572,7 +596,7 @@ Output a SINGLE JSON object, no prose around it:
       markDirty();
     }
     await flush();
-    return { added, skipped, errors };
+    return { added, enriched, skipped, errors };
   }
 
   // ── Enrich one job from its full LinkedIn page ──────────────────────────
@@ -636,7 +660,6 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       .filter((p) => /^https:\/\/www\.linkedin\.com\/in\//.test(p.url));
     const text = String(job.text || '').slice(0, 9000);
     const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
-    pill('Reading the job page…');
     const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
     const resp = await claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 900);
     const d = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
@@ -690,6 +713,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
   async function importPendingLinkedInDetail() {
     if (!PENDING_LINKEDIN_DETAIL) return;
     const job = PENDING_LINKEDIN_DETAIL; PENDING_LINKEDIN_DETAIL = null;
+    pill('Reading the job page…');
     try {
       const { row, opp } = await enrichLinkedInJob(job);
       const what = [(row.parsed && row.parsed.role), (row.parsed && row.parsed.company)].filter(Boolean).join(' at ') || 'job';
@@ -707,7 +731,9 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     const jobs = PENDING_LINKEDIN; PENDING_LINKEDIN = null;
     try {
       const r = await importLinkedInJobs(jobs);
-      pill(r.added ? `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'} in Inbox` + (r.skipped ? ` · ${r.skipped} already here` : '') : `No new jobs · ${r.skipped} already in Level Up`);
+      pill((r.added || r.enriched)
+        ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here`].filter(Boolean).join(' · ')
+        : `No new jobs · ${r.skipped} already in Level Up`);
       window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
     } catch (err) {
       pill('LinkedIn import failed — ' + err.message, 'error');

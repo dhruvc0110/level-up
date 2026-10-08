@@ -331,9 +331,9 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
           <JobIntel enrichment={item.enrichment}/>
         </div>
       )}
-      {item.kind === 'linkedin' && !item.enrichment && (
+      {item.kind === 'linkedin' && (!item.enrichment || item.enrichment.partial) && (
         <div style={{ fontSize: 12, color: 'var(--ink-3)', margin: '-6px 0 16px' }}>
-          Want size, hiring manager and more? Open the job on LinkedIn and click the Sync to Level Up bookmark there.
+          Hiring manager not read yet. Run the bookmark on your Saved list again (or click it on this job's page) to fill it in.
         </div>
       )}
       {draft.company && (

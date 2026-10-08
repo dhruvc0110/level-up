@@ -589,51 +589,42 @@ function FuturePanelsHint() {
 
 // ── LinkedIn saved jobs (bookmark button) ───────────────────────────────
 
-// The bookmark runs on LinkedIn's page and opens Level Up with what it read
-// after "#" (which stays in the browser — never sent to GitHub or anyone else).
-//   - On a single job (…/jobs/view/123 or a list with ?currentJobId=123): sends that
-//     job's full page text + linked profiles → "lijob=" (enrichment).
-//   - On the Saved jobs list: sends each job link + its card text → "lijobs=".
-function buildLinkedInBookmarklet(appUrl) {
-  const code = `(()=>{const B=${JSON.stringify(appUrl + '#view=inbox&')};`
-    + `if(!/(^|\\.)linkedin\\.com$|^localhost$/.test(location.hostname)){alert('Level Up: open LinkedIn first — your Saved jobs list, or a single job.');return}`
-    + `const r=/\\/jobs\\/view\\/(\\d+)/,idOf=a=>(a.href.match(r)||[])[1],go=u=>{if(!window.open(u,'levelup'))alert('Level Up: allow pop-ups for linkedin.com, then click again.')};`
-    + `const cur=(location.pathname.match(r)||[])[1]||new URLSearchParams(location.search).get('currentJobId');`
-    + `if(cur){const box=document.querySelector('.jobs-search__job-details--wrapper,.jobs-search__job-details--container,.jobs-details,.job-view-layout')||document.querySelector('main')||document.body;`
-    + `const ppl=[],sp={};box.querySelectorAll('a[href*="/in/"]').forEach(a=>{const u=a.href.split('?')[0];if(!/linkedin\\.com\\/in\\//.test(u)||sp[u])return;sp[u]=1;`
-    + `let c=a;for(let i=0;i<4&&c.parentElement&&c.innerText.length<60;i++)c=c.parentElement;ppl.push({url:u,text:(c.innerText||'').slice(0,200)})});`
-    + `const co=box.querySelector('a[href*="/company/"]');`
-    + `go(B+'lijob='+encodeURIComponent(JSON.stringify({id:cur,text:(box.innerText||'').slice(0,9000),people:ppl.slice(0,8),companyUrl:co?co.href:null})));return}`
-    + `const seen={},jobs=[];(document.querySelector('main')||document).querySelectorAll('a[href*="/jobs/view/"]').forEach(a=>{const id=idOf(a);if(!id||seen[id])return;seen[id]=1;let c=a;`
-    + `for(let i=0;i<12&&c.parentElement&&c.parentElement!==document.body;i++){const p=c.parentElement,s=new Set();`
-    + `p.querySelectorAll('a[href*="/jobs/view/"]').forEach(x=>s.add(idOf(x)));if(s.size>1||p.innerText.length>1500)break;c=p}`
-    + `jobs.push({id,text:(c.innerText||a.innerText||'').slice(0,700)})});`
-    + `if(!jobs.length){alert('Level Up: no jobs found on this page. Open My Jobs → Saved (or a single job) and wait for it to load.');return}`
-    + `go(B+'lijobs='+encodeURIComponent(JSON.stringify(jobs.slice(0,100))))})();`;
+// The bookmark's code lives in linkedin-bookmarklet.js; this wraps it as a
+// javascript: link pointed at this copy of Level Up. 45s between job pages
+// (Dhruv's choice, to read LinkedIn at a human pace).
+const LINKEDIN_PACE_MS = 45000;
+function buildLinkedInBookmarklet(appUrl, paceMs) {
+  if (typeof window.LU_LINKEDIN_BOOKMARKLET !== 'function') return null;
+  const code = '(' + window.LU_LINKEDIN_BOOKMARKLET.toString() + ')('
+    + JSON.stringify(appUrl + '#view=inbox&') + ',' + (paceMs || LINKEDIN_PACE_MS) + ')';
   return 'javascript:' + encodeURIComponent(code);
 }
 
 function LinkedInJobsPanel() {
   const linkRef = React.useRef(null);
+  const [ready, setReady] = React.useState(true);
   const appUrl = window.location.origin + window.location.pathname + (window.LU_USER && window.LU_USER.localMode ? '?local=1' : '');
   const saved = (window.LU_TRIAGE || []).filter(t => t.kind === 'linkedin').length;
   // Set href directly: React warns about javascript: URLs passed as props.
   React.useEffect(() => {
-    if (linkRef.current) linkRef.current.setAttribute('href', buildLinkedInBookmarklet(appUrl));
+    const href = buildLinkedInBookmarklet(appUrl);
+    if (href && linkRef.current) linkRef.current.setAttribute('href', href);
+    setReady(!!href);
   }, []);
 
   const steps = [
     <>Show your bookmarks bar: <b style={{ color: 'var(--ink-1)' }}>Cmd+Shift+B</b>.</>,
-    <>Drag the button below onto the bookmarks bar (one time).</>,
-    <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. New jobs land in Inbox; ones already sent are skipped.</>,
-    <>For a job you're serious about, open the job itself and click the bookmark again: it adds company size, location, the hiring manager and how you're connected.</>,
+    <>Drag the button below onto the bookmarks bar (one time — re-drag it after Level Up updates this panel).</>,
+    <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. It reads each new job's page, 45 seconds apart (about 8 minutes for 10 jobs) — keep that tab open.</>,
+    <>When it finishes, click <b style={{ color: 'var(--ink-1)' }}>Open in Level Up</b>. Jobs land in Inbox with size, hiring manager and who you know there. Jobs already read are skipped next time.</>,
   ];
 
   return (
     <SettingsPanel title="LinkedIn saved jobs" eyebrow="DATA · LINKEDIN JOBS">
       <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 14px', textWrap: 'pretty' }}>
-        LinkedIn has no way for apps to read your saved jobs, so this is a one-click button you press while you're on
-        LinkedIn. It only reads the page you're looking at — nothing logs in as you. Works in desktop Chrome.
+        LinkedIn has no way for apps to read your saved jobs, so this is a button you press while you're on LinkedIn.
+        It reads your Saved list, then opens each new job's page in the background at a human pace, in your own
+        browser — nothing logs in as you. Works in desktop Chrome.
       </p>
       <ol style={{ margin: '0 0 16px', paddingLeft: 20, color: 'var(--ink-2)', fontSize: 13.5, lineHeight: 1.7 }}>
         {steps.map((s, i) => <li key={i}>{s}</li>)}
@@ -647,6 +638,9 @@ function LinkedInJobsPanel() {
           }}>
           <Icon name="spark" size={13}/> Sync to Level Up
         </a>
+        {!ready && (
+          <span style={{ fontSize: 12.5, color: 'var(--signal)' }}>Refresh the page to load the bookmark button.</span>
+        )}
         <span style={{ fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--mono)', letterSpacing: '0.04em' }}>
           {saved} LinkedIn job{saved === 1 ? '' : 's'} received so far
         </span>

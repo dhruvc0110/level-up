@@ -416,7 +416,7 @@ function JobIntel({ enrichment }) {
             {hm.url ? <a href={hm.url} target="_blank" rel="noopener noreferrer" style={introLink}>{hm.name}</a> : hm.name}
             {hm.title && <span style={{ color: 'var(--ink-3)' }}> · {hm.title}</span>}
             {hm.degree && <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginLeft: 8 }}>{hm.degree}</span>}
-          </> : 'Not named on the posting'}
+          </> : e.partial ? 'Not read yet — job page not opened' : 'Not named on the posting'}
         </span>
       </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12 }}>
