@@ -442,6 +442,89 @@ function JobIntel({ enrichment }) {
   );
 }
 
+// ── Company brief (Claude + web search, cached per company) ───────────────
+function CompanyBrief({ company, context }) {
+  const [, setTick] = React.useState(0);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    const on = () => setTick(t => t + 1);
+    window.addEventListener('lu:companies-changed', on);
+    return () => window.removeEventListener('lu:companies-changed', on);
+  }, []);
+  if (!company || !window.LU_COMPANY) return null;
+  const b = window.LU_COMPANY(company);
+  const research = async () => {
+    setBusy(true);
+    try { await LU_API.researchCompany(company, context); } finally { setBusy(false); }
+  };
+  const label = { fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingTop: 2 };
+  const box = { border: '1px solid var(--line-1)', borderRadius: 3, padding: '12px 14px', background: 'var(--bg-2)' };
+  const linkBtn = { appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--sans)', ...introLink };
+
+  if (busy || (b && b.status === 'researching')) {
+    return <div style={{ ...box, fontSize: 12.5, color: 'var(--ink-3)' }}>Researching {company} on the web…</div>;
+  }
+  if (!b) {
+    return (
+      <div style={{ ...box, fontSize: 12.5, color: 'var(--ink-3)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        No company profile yet.
+        <button onClick={research} style={linkBtn}>Research company</button>
+      </div>
+    );
+  }
+  if (b.status === 'notfound') {
+    return (
+      <div style={{ ...box, fontSize: 12.5, color: 'var(--ink-3)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        Couldn't confidently identify this company on the web ({String(b.reason || '').replace(/\.+$/, '')}).
+        <button onClick={research} style={linkBtn}>Try again</button>
+      </div>
+    );
+  }
+  if (b.status === 'skipped' || b.status === 'error') {
+    return (
+      <div style={{ ...box, fontSize: 12.5, color: b.status === 'error' ? 'var(--signal)' : 'var(--ink-3)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        {b.status === 'skipped' ? `No profile: ${String(b.skipReason || '').replace(/\.+$/, '')}.` : `Couldn't research this company (${b.error}).`}
+        <button onClick={research} style={linkBtn}>{b.status === 'skipped' ? 'Research anyway' : 'Try again'}</button>
+      </div>
+    );
+  }
+  const rows = [
+    ['Revenue', b.revenue ? b.revenue + (b.revenueEstimated ? ' (estimate)' : '') : null],
+    ['Employees', b.employees],
+    ['Ownership', b.ownership],
+    ['HQ', [b.headquarters, b.founded && 'founded ' + b.founded].filter(Boolean).join(' · ')],
+  ].filter(r => r[1]);
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+  return (
+    <div style={box}>
+      {b.whatTheyDo && (
+        <div className="serif-italic" style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: rows.length ? 10 : 0 }}>{b.whatTheyDo}</div>
+      )}
+      {rows.map(([k, v]) => (
+        <div key={k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr', gap: 10, fontSize: 12.5, padding: '3px 0' }}>
+          <span className="mono" style={label}>{k}</span>
+          <span style={{ color: 'var(--ink-1)' }}>{v}</span>
+        </div>
+      ))}
+      {b.recent && b.recent.length > 0 && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--line-1)' }}>
+          <div className="mono" style={{ ...label, marginBottom: 4 }}>Recent</div>
+          {b.recent.map((r, i) => <div key={i} style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>· {r}</div>)}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 8, fontSize: 11.5, color: 'var(--ink-3)' }}>
+        {b.website && <a href={b.website} target="_blank" rel="noopener noreferrer" style={introLink}>{host(b.website)} ↗</a>}
+        {(b.sources || []).length > 0 && <span>Sources: {(b.sources || []).map((u, i) => (
+          <a key={i} href={u} target="_blank" rel="noopener noreferrer" style={{ ...introLink, marginRight: 8 }}>{host(u)}</a>
+        ))}</span>}
+        <span style={{ marginLeft: 'auto' }}>
+          Researched {new Date(b.researchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · <button onClick={research} style={linkBtn}>Refresh</button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ── People Dhruv knows at a company (from Network contacts) ────────────────
 function NetworkAt({ company, hiringManager }) {
   const [showAll, setShowAll] = React.useState(false);
@@ -495,5 +578,5 @@ Object.assign(window, {
   Icon, PersonaTag, PersonaDot, stageColor, StageBar,
   FitStars, DueChip, dueState, WarmthDot,
   Btn, Field, TextInput, TextArea, Select,
-  JobIntel, NetworkAt,
+  JobIntel, NetworkAt, CompanyBrief,
 });

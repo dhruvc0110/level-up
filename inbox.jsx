@@ -325,6 +325,12 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
         )}
       </div>
 
+      {draft.company && (
+        <div style={{ marginBottom: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>Company</div>
+          <CompanyBrief company={draft.company} context={[draft.role && 'Role: ' + draft.role, item.kind !== 'linkedin' && item.fromAddress && 'Came by email from: ' + item.fromAddress].filter(Boolean).join('\n')}/>
+        </div>
+      )}
       {item.enrichment && (
         <div style={{ marginBottom: 18 }}>
           <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>Job details</div>

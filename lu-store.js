@@ -97,6 +97,9 @@
       if (!Array.isArray(doc[k])) doc[k] = [];
     });
     doc.settings = Object.assign({ gmailLabel: 'LevelUp' }, doc.settings || {});
+    if (!doc.companies || typeof doc.companies !== 'object' || Array.isArray(doc.companies)) doc.companies = {};
+    // A brief left "researching" by a closed tab should be retried.
+    Object.keys(doc.companies).forEach((k) => { if (doc.companies[k].status === 'researching') doc.companies[k].status = 'error'; });
     return doc;
   }
 
@@ -371,7 +374,7 @@
   // ════════════════════════════════════════════════════════════════════════
   // Claude (direct from browser)
   // ════════════════════════════════════════════════════════════════════════
-  async function claude(model, system, user, maxTokens) {
+  async function claude(model, system, user, maxTokens, extra) {
     const key = DOC.settings.anthropicApiKey;
     if (!key) throw new Error('No Claude API key set. Add it in Settings.');
     // Claude can briefly answer "busy" (429/5xx/529) when several jobs go in a
@@ -388,7 +391,7 @@
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-          body: JSON.stringify(Object.assign({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: user }] }, system ? { system } : {})),
+          body: JSON.stringify(Object.assign({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: user }] }, system ? { system } : {}, extra || {})),
         });
         j = await r.json().catch(() => ({}));
       } catch (e) {
@@ -759,6 +762,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       pill(opp ? `Updated in Pipeline: ${what}` : `Enriched in Inbox: ${what}`);
       window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
       if (opp) window.dispatchEvent(new CustomEvent('lu:open-opp', { detail: opp.id }));
+      researchMissing();
     } catch (err) {
       pill('LinkedIn enrichment failed — ' + err.message, 'error');
     }
@@ -774,10 +778,124 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
         ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here`].filter(Boolean).join(' · ')
         : `No new jobs · ${r.skipped} already in Level Up`);
       window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+      researchMissing();
     } catch (err) {
       pill('LinkedIn import failed — ' + err.message, 'error');
     }
   }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Company briefs (Claude + web search), one per company, reused across jobs
+  // ════════════════════════════════════════════════════════════════════════
+  const COMPANY_BRIEF_PROMPT = `You research employers for a senior technology executive weighing a role. Use web search (at most 3 searches) to find current, factual information.
+
+Skip the research (skip: true) when the employer is a recruiting, staffing or executive-search firm acting for a client, or when the actual hiring company is not named (e.g. "Confidential", "Unknown", "client of …").
+
+Many company names are shared (e.g. several firms called "Epsilon"). Use the context given (location, industry, role, LinkedIn company page) to make sure you have THE employer of this job. If you cannot confidently identify it, set found: false and do not describe a different company.
+
+Output a SINGLE JSON object, no prose around it:
+{
+  "skip": true | false,
+  "skip_reason": "one short sentence, max 15 words" | null,
+  "found": true | false,
+  "not_found_reason": "one short sentence, max 15 words" | null,
+  "name": "official company name",
+  "website": "https://…" | null,
+  "headquarters": "City, Country" | null,
+  "founded": "year" | null,
+  "ownership": "e.g. Public (NYSE: SYY) / Private / PE-backed (owner name) / Subsidiary of X" | null,
+  "employees": "e.g. ~72,000 (2025)" | null,
+  "revenue": "e.g. $81.4B (FY2025)" | null,
+  "revenue_estimated": true | false,
+  "what_they_do": "2-3 plain sentences: what they sell, to whom, where they stand in their market",
+  "recent": ["notable recent news in max 20 words, starting with month and year"],
+  "sources": ["https://…"]
+}
+Rules: give revenue for private companies only as a clearly labelled estimate (revenue_estimated true); null if nothing credible. recent: at most 3, only from the last 18 months. sources: the 2-4 pages you relied on.`;
+
+  const companyKey = (name) => normCompany(name);
+  const NO_EMPLOYER = /^(unknown|confidential|n\/?a|undisclosed|stealth)\b|client of/i;
+  let researching = false, researchAgain = false;
+
+  async function researchCompany(name, context, force) {
+    const key = companyKey(name);
+    if (!key) return null;
+    const have = DOC.companies[key];
+    if (have && !force && have.status !== 'error') return have;
+    if (!force && NO_EMPLOYER.test(String(name).trim())) {
+      return (DOC.companies[key] = { name, status: 'skipped', skipReason: 'Employer not named in the posting', researchedAt: nowIso() });
+    }
+    DOC.companies[key] = Object.assign({}, have || {}, { name, status: 'researching' });
+    window.dispatchEvent(new CustomEvent('lu:companies-changed'));
+    try {
+      const user = `Company: ${name}\n${context || ''}${force ? '\nThe user asked for this research explicitly: do not skip.' : ''}`;
+      const resp = await claude(CONFIG.parseModel, COMPANY_BRIEF_PROMPT, user, 1500,
+        { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] });
+      const texts = (resp.content || []).filter((b) => b.type === 'text');
+      const d = extractJson(texts.length ? texts[texts.length - 1].text : '{}');
+      DOC.companies[key] = d.skip && !force
+        ? { name, status: 'skipped', skipReason: d.skip_reason || 'Posted by a recruiting firm', researchedAt: nowIso() }
+        : d.found === false
+        ? { name, status: 'notfound', reason: d.not_found_reason || 'Could not confidently identify this company', researchedAt: nowIso() }
+        : {
+          name: d.name || name, status: 'ok', website: d.website || null, headquarters: d.headquarters || null,
+          founded: d.founded || null, ownership: d.ownership || null, employees: d.employees || null,
+          revenue: d.revenue || null, revenueEstimated: !!d.revenue_estimated, whatTheyDo: d.what_they_do || null,
+          recent: (Array.isArray(d.recent) ? d.recent : []).slice(0, 3),
+          sources: (Array.isArray(d.sources) ? d.sources : []).filter((u) => /^https?:\/\//.test(u)).slice(0, 4),
+          researchedAt: nowIso(),
+        };
+    } catch (e) {
+      DOC.companies[key] = { name, status: 'error', error: String(e.message || e).slice(0, 200), researchedAt: nowIso() };
+    }
+    markDirty();
+    window.dispatchEvent(new CustomEvent('lu:companies-changed'));
+    return DOC.companies[key];
+  }
+
+  // What we know about this employer from its jobs: helps Claude pick the right
+  // company when names are shared.
+  function contextFor(name) {
+    const k = companyKey(name), lines = new Set();
+    DOC.triage.filter((t) => t.parsed && companyKey(t.parsed.company) === k).forEach((t) => {
+      const e = t.enrichment || {};
+      if (t.parsed.role) lines.add('Role: ' + t.parsed.role);
+      if (e.location) lines.add('Job location: ' + e.location);
+      if (e.industry) lines.add('Industry (from posting): ' + e.industry);
+      if (e.companySize && !e.companySizeEstimated) lines.add('Size (from posting): ' + e.companySize);
+      if (e.companyUrl) lines.add('LinkedIn company page: ' + e.companyUrl);
+      if (t.kind !== 'linkedin' && t.fromAddress) lines.add('Came by email from: ' + t.fromAddress);
+    });
+    DOC.opportunities.filter((o) => companyKey(o.company) === k).forEach((o) => {
+      if (o.role) lines.add('Role: ' + o.role);
+      if (o.source) lines.add('Source: ' + o.source);
+    });
+    return [...lines].slice(0, 10).join('\n');
+  }
+
+  // Every company in the Inbox (pending) or Pipeline without a brief yet.
+  // Runs in the background after any sync; one at a time.
+  async function researchMissing() {
+    if (researching) { researchAgain = true; return; }
+    if (!DOC.settings.anthropicApiKey) return;
+    researching = true;
+    try {
+      const todo = new Map();
+      const add = (name) => { const k = companyKey(name); if (k && !todo.has(k) && (!DOC.companies[k] || DOC.companies[k].status === 'error')) todo.set(k, { name, ctx: contextFor(name) }); };
+      DOC.triage.filter((t) => t.triageStatus === 'pending' && t.parseStatus === 'parsed' && t.parsed && t.parsed.company).forEach((t) => add(t.parsed.company));
+      DOC.opportunities.forEach((o) => add(o.company));
+      let n = 0;
+      for (const { name, ctx } of [...todo.values()].slice(0, 15)) {
+        pill(`Researching ${name} (${++n} of ${Math.min(todo.size, 15)})…`);
+        await researchCompany(name, ctx);
+      }
+      if (n) { await flush(); pill(`Company profiles ready (${n})`); }
+    } finally {
+      researching = false;
+      if (researchAgain) { researchAgain = false; researchMissing(); }
+    }
+  }
+  window.LU_COMPANY = (name) => DOC.companies[companyKey(name)] || null;
 
   // ════════════════════════════════════════════════════════════════════════
   // Google Contacts + Calendar
@@ -998,7 +1116,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     if (p === 'inbox' && method === 'GET') {
       return DOC.triage.filter((t) => t.triageStatus === 'pending').map((t) => Object.assign({}, t));
     }
-    if (p === 'inbox/sync' && method === 'POST') { const r = await syncInbox(); await flush(); return r; }
+    if (p === 'inbox/sync' && method === 'POST') { const r = await syncInbox(); await flush(); researchMissing(); return r; }
     if (seg[0] === 'inbox' && seg.length === 3) {
       const row = DOC.triage.find((t) => t.id === seg[1]);
       if (!row) throw new Error('Triage item not found');
@@ -1048,7 +1166,9 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     }
     if (p === 'google/sync' && method === 'POST') {
       if (LOCAL_MODE) throw new Error('Google sync is not available in local test mode.');
-      return syncAllGoogle();
+      const r = await syncAllGoogle();
+      researchMissing();
+      return r;
     }
 
     throw new Error(`No handler for ${method} /api/${p}`);
@@ -1105,6 +1225,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       await flush();
       window.location.reload();
     },
+    researchCompany: async (name) => { const b = await researchCompany(name, contextFor(name), true); await flush(); return b; },
+    researchMissing,
     getTheme() { return THEMES[DOC.settings.theme] ? DOC.settings.theme : 'dark'; },
     setTheme(t) { DOC.settings.theme = applyTheme(t); markDirty(); },
     async reload() { await flush(); window.location.reload(); },

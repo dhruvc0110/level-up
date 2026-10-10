@@ -216,6 +216,13 @@ function DetailContext({ opp, onUpdate }) {
         </div>
       </DetailField>
 
+      {/* Company brief (web research) */}
+      {opp.company && (
+        <DetailField label="Company">
+          <CompanyBrief company={opp.company} context={[opp.role && 'Role: ' + opp.role, opp.source && 'Source: ' + opp.source].filter(Boolean).join('\n')}/>
+        </DetailField>
+      )}
+
       {/* From the LinkedIn job page (bookmark on a job page) */}
       {opp.enrichment && (
         <DetailField label="Job details">
