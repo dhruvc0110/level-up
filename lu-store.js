@@ -659,7 +659,12 @@ company_size and industry come from what you know about the company; use null if
   async function importLinkedInJobs(jobs) {
     let added = 0, enriched = 0, skipped = 0, n = 0;
     const errors = [];
-    for (const j of (jobs || []).slice(0, 100)) {
+    const list = (jobs || []).slice(0, 100);
+    let pos = 0;
+    // Show each job in the Inbox as soon as it's saved, with a running count.
+    const progress = () => { pill(`LinkedIn: ${pos} of ${list.length} done…`, 'sticky'); window.dispatchEvent(new CustomEvent('lu:inbox-changed')); };
+    for (const j of list) {
+      if (pos++) progress();
       if (PASSIVE || RELEASING) throw new Error('Paused: Level Up opened in another window');
       const jobId = String(j && j.id || '').replace(/\D/g, '');
       if (!jobId) continue;
@@ -669,13 +674,13 @@ company_size and industry come from what you know about the company; use null if
       if (existing) {
         // Already here: only worth touching if we now have its full page.
         if (detail && (!existing.enrichment || existing.enrichment.partial)) {
-          pill(`Reading LinkedIn job ${++n}…`);
+          pill(`LinkedIn: reading job ${pos} of ${list.length}…`, 'sticky'); n++;
           try { await enrichLinkedInJob(detail); enriched++; delete existing.enrichError; }
           catch (e) { existing.enrichError = String(e.message || e).slice(0, 200); errors.push(existing.enrichError); markDirty(); }
         } else skipped++;
         continue;
       }
-      pill(`Reading LinkedIn job ${++n}…`);
+      pill(`LinkedIn: reading job ${pos} of ${list.length}…`, 'sticky'); n++;
       if (detail) {
         try { await enrichLinkedInJob(detail); added++; enriched++; continue; }
         catch (e) { var detailError = String(e.message || e).slice(0, 200); errors.push(detailError); /* fall back to the card */ }
