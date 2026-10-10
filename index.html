@@ -11,6 +11,10 @@
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <title>Level Up</title>
+<script>
+  // Apply the saved theme before anything paints (no dark flash in Light/Neutral).
+  try { var luT = localStorage.getItem('lu_theme'); if (luT === 'light' || luT === 'neutral') document.documentElement.setAttribute('data-theme', luT); } catch (e) { /* storage blocked */ }
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +41,10 @@
     --ink-2:       #A6A39C;   /* secondary */
     --ink-3:       #6E6B65;   /* tertiary */
     --ink-4:       #46443F;   /* quaternary / quiet labels */
+    --ink-hover:   #FFFFFF;   /* primary button hover */
+    --scroll:      rgba(255,255,255,0.08);
+    --scroll-hover: rgba(255,255,255,0.16);
+    --selection:   rgba(236,234,230,0.16);
 
     /* Five quiet stage colors — desaturated, all live around oklch L≈74% */
     --st-discovered:    oklch(74% 0.018 250);   /* cool slate */
@@ -75,10 +83,10 @@
   *::-webkit-scrollbar { width: 8px; height: 8px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; transition: background .2s; }
-  *:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); }
-  *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+  *:hover::-webkit-scrollbar-thumb { background: var(--scroll); }
+  *::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover); }
 
-  ::selection { background: rgba(236,234,230,0.16); color: var(--ink-1); }
+  ::selection { background: var(--selection); color: var(--ink-1); }
 
   /* Type primitives */
   .serif { font-family: var(--serif); font-weight: 400; letter-spacing: -0.005em; }
@@ -231,6 +239,41 @@
   body[data-density="compact"] { --row-h: 28px; --card-pad: 10px; --kan-gap: 6px; }
   body[data-density="regular"] { --row-h: 36px; --card-pad: 14px; --kan-gap: 10px; }
   body[data-density="comfy"]   { --row-h: 44px; --card-pad: 18px; --kan-gap: 14px; }
+
+  /* ─────────────────────────────────────────────────────────────────
+     THEMES — Settings → Appearance. Dark is the base palette above.
+     html[data-theme] … body beats body[data-aesthetic] so the theme wins.
+     ───────────────────────────────────────────────────────────────── */
+  html[data-theme="light"] { color-scheme: light; background: #F3F2EF; }
+  html[data-theme="light"] body {
+    --bg-0: #F3F2EF; --bg-1: #F8F7F5; --bg-2: #FFFFFF; --bg-3: #EEECE8; --bg-4: #E5E2DD;
+    --line-1: rgba(24,22,18,0.08); --line-2: rgba(24,22,18,0.13); --line-3: rgba(24,22,18,0.24);
+    --ink-1: #1A1916; --ink-2: #4F4C46; --ink-3: #807C75; --ink-4: #ABA79F;
+    --ink-hover: #000000;
+    --st-discovered:    oklch(55% 0.04 250);
+    --st-evaluating:    oklch(52% 0.07 290);
+    --st-applied:       oklch(52% 0.07 170);
+    --st-conversations: oklch(58% 0.10 75);
+    --st-decision:      oklch(52% 0.11 25);
+    --signal: oklch(52% 0.18 25);
+    --scroll: rgba(24,22,18,0.12); --scroll-hover: rgba(24,22,18,0.24);
+    --selection: rgba(24,22,18,0.12);
+  }
+  html[data-theme="neutral"] { color-scheme: light; background: #E3DED5; }
+  html[data-theme="neutral"] body {
+    --bg-0: #E3DED5; --bg-1: #E9E5DD; --bg-2: #F2EFE9; --bg-3: #DDD7CC; --bg-4: #D3CCBF;
+    --line-1: rgba(60,46,28,0.10); --line-2: rgba(60,46,28,0.16); --line-3: rgba(60,46,28,0.28);
+    --ink-1: #29241E; --ink-2: #5A5247; --ink-3: #857C6F; --ink-4: #ADA493;
+    --ink-hover: #000000;
+    --st-discovered:    oklch(52% 0.04 240);
+    --st-evaluating:    oklch(50% 0.06 300);
+    --st-applied:       oklch(50% 0.06 160);
+    --st-conversations: oklch(56% 0.10 70);
+    --st-decision:      oklch(50% 0.10 30);
+    --signal: oklch(50% 0.17 30);
+    --scroll: rgba(60,46,28,0.14); --scroll-hover: rgba(60,46,28,0.26);
+    --selection: rgba(60,46,28,0.14);
+  }
 </style>
 </head>
 <body>

@@ -118,11 +118,11 @@
   function pill(text, tone) {
     if (!pillEl) {
       pillEl = document.createElement('div');
-      pillEl.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:9999;padding:6px 11px;border-radius:3px;font:11px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;background:#121212;border:1px solid rgba(255,255,255,.08);color:#A6A39C;transition:opacity .3s;pointer-events:none;';
+      pillEl.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:9999;padding:6px 11px;border-radius:3px;font:11px/1.3 ui-monospace,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;background:var(--bg-2);border:1px solid var(--line-2);color:var(--ink-2);transition:opacity .3s;pointer-events:none;';
       document.body.appendChild(pillEl);
     }
     pillEl.textContent = text;
-    pillEl.style.color = tone === 'error' ? 'oklch(64% 0.16 25)' : '#A6A39C';
+    pillEl.style.color = tone === 'error' ? 'oklch(64% 0.16 25)' : 'var(--ink-2)';
     pillEl.style.opacity = '1';
     clearTimeout(pillTimer);
     if (tone !== 'sticky' && tone !== 'error') pillTimer = setTimeout(() => { pillEl.style.opacity = '0'; }, 1800);
@@ -132,21 +132,21 @@
   function screen(html) {
     const root = document.getElementById('root');
     root.innerHTML = `
-      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:#070707;color:#ECEAE6;font:14px/1.55 'Geist',-apple-system,sans-serif;">
-        <div style="width:100%;max-width:420px;background:#0C0C0C;border:1px solid rgba(255,255,255,.06);border-radius:4px;padding:40px;">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:var(--bg-0);color:var(--ink-1);font:14px/1.55 'Geist',-apple-system,sans-serif;">
+        <div style="width:100%;max-width:420px;background:var(--bg-1);border:1px solid var(--line-1);border-radius:4px;padding:40px;">
           <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
             <span style="font-family:'Newsreader',Georgia,serif;font-size:28px;">Level</span>
-            <span style="font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:28px;color:#A6A39C;">Up</span>
+            <span style="font-family:'Newsreader',Georgia,serif;font-style:italic;font-size:28px;color:var(--ink-2);">Up</span>
           </div>
-          <div style="font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#46443F;margin-bottom:32px;">Career · Command Center</div>
+          <div style="font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-4);margin-bottom:32px;">Career · Command Center</div>
           ${html}
         </div>
       </div>`;
   }
   const BTN = 'display:block;width:100%;margin-top:14px;padding:12px 14px;border:0;border-radius:3px;font:500 14px Geist,-apple-system,sans-serif;cursor:pointer;';
-  const BTN_PRIMARY = BTN + 'background:#ECEAE6;color:#070707;';
-  const BTN_GHOST = BTN + 'background:transparent;color:#A6A39C;border:1px solid rgba(255,255,255,.12);';
-  const NOTE = 'margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,.06);font-size:12px;color:#6E6B65;line-height:1.6;';
+  const BTN_PRIMARY = BTN + 'background:var(--ink-1);color:var(--bg-0);';
+  const BTN_GHOST = BTN + 'background:transparent;color:var(--ink-2);border:1px solid var(--line-3);';
+  const NOTE = 'margin-top:24px;padding-top:20px;border-top:1px solid var(--line-1);font-size:12px;color:var(--ink-3);line-height:1.6;';
 
   function waitForClick(id) {
     return new Promise((resolve) => {
@@ -221,8 +221,8 @@
     if (reauthPromise) return reauthPromise;
     reauthPromise = new Promise((resolve, reject) => {
       const bar = document.createElement('div');
-      bar.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:14px;padding:12px 16px;background:#121212;border:1px solid rgba(255,255,255,.14);border-radius:4px;color:#ECEAE6;font:13px Geist,-apple-system,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);';
-      bar.innerHTML = '<span>Google session expired.</span><button style="padding:7px 12px;border:0;border-radius:3px;background:#ECEAE6;color:#070707;font:500 13px Geist,sans-serif;cursor:pointer;">Continue</button>';
+      bar.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg-2);border:1px solid var(--line-3);border-radius:4px;color:var(--ink-1);font:13px Geist,-apple-system,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);';
+      bar.innerHTML = '<span>Google session expired.</span><button style="padding:7px 12px;border:0;border-radius:3px;background:var(--ink-1);color:var(--bg-0);font:500 13px Geist,sans-serif;cursor:pointer;">Continue</button>';
       document.body.appendChild(bar);
       bar.querySelector('button').addEventListener('click', async () => {
         try { const t = await requestToken(); bar.remove(); reauthPromise = null; resolve(t); }
@@ -1017,6 +1017,18 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
 
   window.LU_NETWORK_FOR = networkFor;
 
+  // ── Theme (Settings → Appearance). Dark is the default. ─────────────────
+  const THEMES = { dark: '#070707', light: '#F3F2EF', neutral: '#E3DED5' };
+  function applyTheme(t) {
+    const theme = THEMES[t] ? t : 'dark';
+    if (theme === 'dark') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEMES[theme]);
+    try { localStorage.setItem('lu_theme', theme); } catch (e) { /* storage blocked */ }
+    return theme;
+  }
+
   window.LU_API = {
     get:    (path)       => route('GET', path),
     put:    (path, body) => route('PUT', path, body),
@@ -1054,6 +1066,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       await flush();
       window.location.reload();
     },
+    getTheme() { return THEMES[DOC.settings.theme] ? DOC.settings.theme : 'dark'; },
+    setTheme(t) { DOC.settings.theme = applyTheme(t); markDirty(); },
     async reload() { await flush(); window.location.reload(); },
     signOut,
   };
@@ -1085,7 +1099,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     while (true) {
       screen(`
         <h1 style="font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:400;margin:0 0 10px;">Set up your data</h1>
-        <p style="color:#A6A39C;margin:0 0 6px;">No Level Up data file found ${LOCAL_MODE ? 'in this browser' : 'in your Google Drive'}. Bring in your backup, or start empty.</p>
+        <p style="color:var(--ink-2);margin:0 0 6px;">No Level Up data file found ${LOCAL_MODE ? 'in this browser' : 'in your Google Drive'}. Bring in your backup, or start empty.</p>
         <input id="lu-file" type="file" accept=".json,application/json" style="display:none">
         <button id="lu-import" style="${BTN_PRIMARY}">Import backup file (.json)</button>
         <button id="lu-empty" style="${BTN_GHOST}">Start empty</button>
@@ -1106,7 +1120,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
 
   async function signInScreen(message) {
     screen(`
-      <p style="color:#A6A39C;margin:0 0 6px;">Sign in with the Google account that holds your Level Up data.</p>
+      <p style="color:var(--ink-2);margin:0 0 6px;">Sign in with the Google account that holds your Level Up data.</p>
       <button id="lu-signin" style="${BTN_PRIMARY}">Continue with Google</button>
       <div id="lu-err" style="margin-top:12px;color:oklch(64% 0.16 25);font-size:12.5px;">${esc(message || '')}</div>
       <div style="${NOTE}">Your data lives in your own Google Drive. Gmail, Contacts and Calendar are read-only.</div>`);
@@ -1124,11 +1138,11 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
   window.LU_INIT_PROMISE = (async function bootstrap() {
     try {
       if (!LOCAL_MODE && !storedToken()) await signInScreen();
-      screen('<p style="color:#A6A39C;margin:0;">Loading your data…</p>');
+      screen('<p style="color:var(--ink-2);margin:0;">Loading your data…</p>');
       let raw = await store.load();
       if (!raw) {
         DOC = await firstRun();
-        screen('<p style="color:#A6A39C;margin:0;">Saving to ' + (LOCAL_MODE ? 'this browser' : 'your Drive') + '…</p>');
+        screen('<p style="color:var(--ink-2);margin:0;">Saving to ' + (LOCAL_MODE ? 'this browser' : 'your Drive') + '…</p>');
         DOC.updatedAt = nowIso();
         await store.create(DOC);
       } else {
@@ -1137,6 +1151,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       const tokNow = (() => { try { return JSON.parse(localStorage.getItem(LS_TOKEN) || 'null'); } catch (e) { return null; } })();
       window.LU_USER = { email: LOCAL_MODE ? null : (tokNow && tokNow.email) || null, localMode: LOCAL_MODE };
       publishGlobals();
+      if (DOC.settings.theme) applyTheme(DOC.settings.theme);
       window.addEventListener('lu:opportunities-changed', publishGlobals);
       document.getElementById('root').innerHTML = '';
       importPendingLinkedIn();
@@ -1145,7 +1160,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       if (!LOCAL_MODE && (err.status === 401 || err.status === 403)) localStorage.removeItem(LS_TOKEN);
       screen(`
         <h1 style="font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:400;margin:0 0 10px;">Couldn't load your data</h1>
-        <p style="color:#A6A39C;margin:0 0 6px;">${esc(err.message || String(err))}</p>
+        <p style="color:var(--ink-2);margin:0 0 6px;">${esc(err.message || String(err))}</p>
         <button onclick="location.reload()" style="${BTN_PRIMARY}">Try again</button>`);
       throw err;
     }

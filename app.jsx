@@ -359,7 +359,7 @@ function Sidebar({ view, onView, onAdd, personaChip, personas }) {
         }}>
           <div style={{
             width: 26, height: 26, borderRadius: '50%',
-            background: 'linear-gradient(140deg, #2a2a2a, #444)',
+            background: 'linear-gradient(140deg, var(--bg-3), var(--bg-4))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             border: '1px solid var(--line-2)',
             fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink-1)',

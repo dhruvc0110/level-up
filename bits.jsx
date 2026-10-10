@@ -303,7 +303,7 @@ function Btn({ children, variant = 'ghost', size = 'm', icon, onClick, style, ty
         if (variant === 'ghost') e.currentTarget.style.background = 'var(--bg-2)';
         if (variant === 'secondary') e.currentTarget.style.background = 'var(--bg-3)';
         if (variant === 'outline') e.currentTarget.style.background = 'var(--bg-2)';
-        if (variant === 'primary') e.currentTarget.style.background = '#fff';
+        if (variant === 'primary') e.currentTarget.style.background = 'var(--ink-hover)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = variants[variant].background;

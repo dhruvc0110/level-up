@@ -10,6 +10,7 @@ function SettingsView() {
       <SettingsHeader/>
       <div className="lu-main-scroll" style={{ padding: '20px 28px 60px' }}>
         <div style={{ maxWidth: 760 }}>
+          <AppearancePanel/>
           <AnthropicKeyPanel/>
           <GmailPanel/>
           <LinkedInJobsPanel/>
@@ -58,6 +59,64 @@ function SettingsPanel({ title, eyebrow, children }) {
       </h2>
       {children}
     </section>
+  );
+}
+
+// ── Appearance (theme) ──────────────────────────────────────────────────
+
+// Preview swatches use each theme's own colours (mirrors the palettes in index.html).
+const THEME_OPTIONS = [
+  { id: 'dark',    label: 'Dark',    note: 'Default · the original near-black',  bg: '#070707', card: '#121212', line: 'rgba(255,255,255,0.10)', ink: '#ECEAE6', ink2: '#6E6B65' },
+  { id: 'light',   label: 'Light',   note: 'Crisp paper white',                   bg: '#F3F2EF', card: '#FFFFFF', line: 'rgba(24,22,18,0.13)',    ink: '#1A1916', ink2: '#807C75' },
+  { id: 'neutral', label: 'Neutral', note: 'Warm stone, easy on the eyes',        bg: '#E3DED5', card: '#F2EFE9', line: 'rgba(60,46,28,0.16)',    ink: '#29241E', ink2: '#857C6F' },
+];
+
+function AppearancePanel() {
+  const [theme, setTheme] = React.useState(() => LU_API.getTheme());
+  const choose = (id) => { LU_API.setTheme(id); setTheme(id); };
+
+  return (
+    <SettingsPanel title="Appearance" eyebrow="DISPLAY · THEME">
+      <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>
+        Pick a colour theme. It's saved with your data, so it follows you to every device.
+      </p>
+      <div role="radiogroup" aria-label="Theme" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        {THEME_OPTIONS.map(o => {
+          const active = theme === o.id;
+          return (
+            <button key={o.id} role="radio" aria-checked={active} onClick={() => choose(o.id)}
+              style={{
+                appearance: 'none', textAlign: 'left', cursor: 'pointer', padding: 10,
+                background: 'var(--bg-2)', borderRadius: 4,
+                border: active ? '1px solid var(--ink-1)' : '1px solid var(--line-2)',
+                boxShadow: active ? '0 0 0 1px var(--ink-1)' : 'none',
+                transition: 'border-color .12s',
+              }}>
+              {/* Mini preview of the app in this theme */}
+              <div style={{ background: o.bg, borderRadius: 3, padding: 10, border: '1px solid ' + o.line, marginBottom: 10 }}>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 15, color: o.ink, marginBottom: 8 }}>
+                  Level <span style={{ fontStyle: 'italic', color: o.ink2 }}>Up</span>
+                </div>
+                <div style={{ background: o.card, border: '1px solid ' + o.line, borderRadius: 2, padding: '7px 8px' }}>
+                  <div style={{ height: 5, width: '70%', background: o.ink, borderRadius: 2, marginBottom: 5, opacity: 0.85 }}/>
+                  <div style={{ height: 4, width: '45%', background: o.ink2, borderRadius: 2 }}/>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  width: 12, height: 12, borderRadius: '50%', flex: '0 0 auto',
+                  border: '1px solid ' + (active ? 'var(--ink-1)' : 'var(--line-3)'),
+                  background: active ? 'var(--ink-1)' : 'transparent',
+                  boxShadow: active ? 'inset 0 0 0 2px var(--bg-2)' : 'none',
+                }}/>
+                <span style={{ fontSize: 13.5, color: 'var(--ink-1)', fontWeight: 500 }}>{o.label}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 3, paddingLeft: 20 }}>{o.note}</div>
+            </button>
+          );
+        })}
+      </div>
+    </SettingsPanel>
   );
 }
 
