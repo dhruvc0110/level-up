@@ -374,19 +374,31 @@
   async function claude(model, system, user, maxTokens) {
     const key = DOC.settings.anthropicApiKey;
     if (!key) throw new Error('No Claude API key set. Add it in Settings.');
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+    // Claude can briefly answer "busy" (429/5xx/529) when several jobs go in a
+    // row; wait and try again (2s, then 6s) before giving up.
+    const RETRY = [429, 500, 502, 503, 504, 529];
+    for (let attempt = 0; ; attempt++) {
+      let r, j;
+      try {
+        r = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
-      body: JSON.stringify(Object.assign({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: user }] }, system ? { system } : {})),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error((j.error && j.error.message) || ('Claude error ' + r.status));
-    return j;
+          body: JSON.stringify(Object.assign({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: user }] }, system ? { system } : {})),
+        });
+        j = await r.json().catch(() => ({}));
+      } catch (e) {
+        if (attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
+        throw new Error('Could not reach Claude (' + (e.message || e) + ')');
+      }
+      if (r.ok) return j;
+      if (RETRY.includes(r.status) && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
+      throw new Error((j.error && j.error.message) || ('Claude error ' + r.status));
+    }
   }
 
   const PERSONAS_FOR_PROMPT = [
@@ -562,14 +574,15 @@ company_size and industry come from what you know about the company; use null if
         // Already here: only worth touching if we now have its full page.
         if (detail && (!existing.enrichment || existing.enrichment.partial)) {
           pill(`Reading LinkedIn job ${++n}…`);
-          try { await enrichLinkedInJob(detail); enriched++; } catch (e) { errors.push(String(e.message || e).slice(0, 200)); }
+          try { await enrichLinkedInJob(detail); enriched++; delete existing.enrichError; }
+          catch (e) { existing.enrichError = String(e.message || e).slice(0, 200); errors.push(existing.enrichError); markDirty(); }
         } else skipped++;
         continue;
       }
       pill(`Reading LinkedIn job ${++n}…`);
       if (detail) {
         try { await enrichLinkedInJob(detail); added++; enriched++; continue; }
-        catch (e) { errors.push(String(e.message || e).slice(0, 200)); /* fall back to the card */ }
+        catch (e) { var detailError = String(e.message || e).slice(0, 200); errors.push(detailError); /* fall back to the card */ }
       }
       const text = String(j.text || '').slice(0, 1500);
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -580,6 +593,7 @@ company_size and industry come from what you know about the company; use null if
         receivedAt: nowIso(), parsed: null, parseStatus: 'pending', triageStatus: 'pending',
         opportunityId: null, errorMessage: null, createdAt: nowIso(), parsedAt: null, triagedAt: null,
       };
+      if (typeof detailError === 'string') { row.enrichError = detailError; detailError = undefined; }
       DOC.triage.unshift(row);
       added++;
       try {
@@ -669,8 +683,11 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     const text = String(job.text || '').slice(0, 9000);
     const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
     const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
-    const resp = await claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 1400);
-    const d = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+    const ask = () => claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 2000);
+    const answer = (resp) => extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+    let d;
+    try { d = answer(await ask()); }
+    catch (e) { if (!(e instanceof SyntaxError)) throw e; d = answer(await ask()); } // unreadable reply: ask once more
     let hm = d.hiring_manager && d.hiring_manager.name ? d.hiring_manager : null;
     if (hm && !people.some((p) => p.url === String(hm.profile_url || '').split('?')[0])) hm = { ...hm, profile_url: null };
     const companyUrl = /^https:\/\/www\.linkedin\.com\/company\//.test(job.companyUrl || '') ? String(job.companyUrl).split('?')[0] : null;
@@ -718,6 +735,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       if (row.parseStatus !== 'parsed') { row.parseStatus = 'parsed'; p.is_opportunity = true; }
     }
     row.enrichment = enrichment;
+    delete row.enrichError;
     row.parsedAt = nowIso();
 
     let opp = row.opportunityId ? DOC.opportunities.find((o) => o.id === row.opportunityId) : null;
