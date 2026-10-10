@@ -674,7 +674,7 @@ function LinkedInJobsPanel() {
   const steps = [
     <>Show your bookmarks bar: <b style={{ color: 'var(--ink-1)' }}>Cmd+Shift+B</b>.</>,
     <>Drag the button below onto the bookmarks bar (one time — re-drag it after Level Up updates this panel).</>,
-    <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. It reads each new job's page, 45 seconds apart (about 8 minutes for 10 jobs) — keep that tab open.</>,
+    <>On LinkedIn, open <b style={{ color: 'var(--ink-1)' }}>My Jobs → Saved</b> and click the bookmark. It reads each new job's page, 45 seconds apart (about 8 minutes for 10 jobs). <b style={{ color: 'var(--ink-1)' }}>Keep that tab in front</b> — LinkedIn only loads job details on a visible tab, so it pauses if you switch away. LinkedIn shows 10 saved jobs per page; for more, go to the next page and click again.</>,
     <>When it finishes, click <b style={{ color: 'var(--ink-1)' }}>Open in Level Up</b>. Jobs land in Inbox with size, hiring manager and who you know there. Jobs already read are skipped next time.</>,
   ];
 

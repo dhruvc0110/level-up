@@ -41,15 +41,21 @@
   // "#" never leaves the browser.
   // A single job page sends "#…&lijob=<json>" (one job, full page text) instead.
   let PENDING_LINKEDIN = null, PENDING_LINKEDIN_DETAIL = null;
-  (function takeLinkedInPayload() {
+  function takeLinkedInPayload() {
     const m = window.location.hash.match(/(?:^#|&)lijobs=([^&]*)/);
     const d = window.location.hash.match(/(?:^#|&)lijob=([^&]*)/);
-    if (!m && !d) return;
+    if (!m && !d) return false;
     try { if (m) { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) PENDING_LINKEDIN = j; } } catch (e) { /* malformed */ }
     try { if (d) { const j = JSON.parse(decodeURIComponent(d[1])); if (j && j.id) PENDING_LINKEDIN_DETAIL = j; } } catch (e) { /* malformed */ }
     const rest = window.location.hash.replace(/&?lijobs?=[^&]*/g, '').replace(/^#&/, '#');
-    history.replaceState(null, '', window.location.pathname + window.location.search + (rest === '#' ? '' : rest));
-  })();
+    history.replaceState(history.state, '', window.location.pathname + window.location.search + (rest === '#' ? '' : rest));
+    return true;
+  }
+  takeLinkedInPayload();
+  // If Level Up is already open in the bookmark's window, the next click only
+  // changes the address after "#" (no reload), so pick jobs up from that too.
+  let APP_READY = false;
+  window.addEventListener('hashchange', () => { if (takeLinkedInPayload() && APP_READY) importPendingLinkedIn(); });
   const LS_TOKEN = 'lu_google_token';
   const LS_LOCAL_DOC = 'lu_local_doc';
 
@@ -604,7 +610,7 @@ company_size and industry come from what you know about the company; use null if
 
 ${PERSONAS_FOR_PROMPT}
 
-You get the page text plus a list of LinkedIn profiles linked on the page (URL + nearby text). The hiring manager / poster usually appears under "Meet the hiring team" with a connection degree (1st, 2nd, 3rd).
+You get the page text plus a list of LinkedIn profiles linked on the page (URL + nearby text). The hiring manager / poster usually appears under "Meet the hiring team" or "Job poster" with a connection degree (1st, 2nd, 3rd). LinkedIn's "People you can reach out to" section lists people who could help (with degree and a reason such as "Company alum from X" or "School alumni from Y"); employees of the company may also appear with their degree.
 
 Output a SINGLE JSON object, no prose around it:
 
@@ -617,13 +623,15 @@ Output a SINGLE JSON object, no prose around it:
   "company_size_estimated": true | false,
   "industry": "Hospital & Health Care" | null,
   "hiring_manager": { "name": "...", "title": "...", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null } | null,
+  "reach_out": [ { "name": "...", "title": "short headline", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null, "reason": "e.g. Company alum from Cognizant / Partner at the company" } ],
+  "reach_out_note": "summary line LinkedIn shows without names, e.g. School alumni from IIM Lucknow" | null,
   "summary": "max 35 words: the mandate in plain words (scope, scale, reporting line)",
   "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null
 }
 
-Rules: company_size comes from the page ("About the company"); if absent, give your best estimate and set company_size_estimated true, or null if you don't know the company. hiring_manager only if the page names one; profile_url MUST be copied exactly from the provided list, else null. Never invent people.`;
+Rules: company_size comes from the page ("About the company"); if absent, give your best estimate and set company_size_estimated true, or null if you don't know the company. hiring_manager only if the page names one. reach_out: named people from "People you can reach out to", plus company employees shown with 1st or 2nd degree; best first, max 6; [] if none. Each person's reason is only the text shown with that person. A group line with no name (e.g. "School alumni from X · Show all") goes in reach_out_note, never on a person. Every profile_url MUST be copied exactly from the provided list, else null. Never invent people.`;
 
   const normCompany = (s) => String(s || '').toLowerCase()
     .replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ')
@@ -655,18 +663,31 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
   async function enrichLinkedInJob(job) {
     const jobId = String(job && job.id || '').replace(/\D/g, '');
     if (!jobId) throw new Error('No job id on that page.');
-    const people = (Array.isArray(job.people) ? job.people : []).slice(0, 8)
+    const people = (Array.isArray(job.people) ? job.people : []).slice(0, 15)
       .map((p) => ({ url: String(p.url || '').split('?')[0], text: String(p.text || '').slice(0, 200) }))
       .filter((p) => /^https:\/\/www\.linkedin\.com\/in\//.test(p.url));
     const text = String(job.text || '').slice(0, 9000);
     const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
     const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
-    const resp = await claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 900);
+    const resp = await claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 1400);
     const d = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
     let hm = d.hiring_manager && d.hiring_manager.name ? d.hiring_manager : null;
     if (hm && !people.some((p) => p.url === String(hm.profile_url || '').split('?')[0])) hm = { ...hm, profile_url: null };
     const companyUrl = /^https:\/\/www\.linkedin\.com\/company\//.test(job.companyUrl || '') ? String(job.companyUrl).split('?')[0] : null;
+    const knownUrls = new Set(people.map((p) => p.url));
+    // Group lines LinkedIn shows without names ("School alumni from X") are a
+    // note for the job, not a reason attached to one person.
+    const GROUP_LINE = /(school alumni|company alumni|alumni) from [^\n;·]+/i;
+    const groupMatch = text.match(new RegExp('^\\s*(?:' + GROUP_LINE.source + ')\\s*$', 'im'));
+    const reachOut = (Array.isArray(d.reach_out) ? d.reach_out : []).filter((r) => r && r.name).slice(0, 6).map((r) => {
+      const u = String(r.profile_url || '').split('?')[0];
+      let reason = String(r.reason || '');
+      if (groupMatch) reason = reason.split(/;\s*/).filter((part) => !part.toLowerCase().includes(groupMatch[0].trim().toLowerCase())).join('; ');
+      return { name: r.name, title: r.title || '', degree: r.degree || null, reason, url: knownUrls.has(u) ? u : null };
+    });
+    if (groupMatch && !d.reach_out_note) d.reach_out_note = groupMatch[0].trim();
     const enrichment = {
+      reachOut, reachOutNote: d.reach_out_note || null,
       location: d.location || null, workplace: d.workplace || null,
       companySize: d.company_size || null, companySizeEstimated: !!d.company_size_estimated,
       industry: d.industry || null, summary: d.summary || null, companyUrl, jobUrl,
@@ -1154,6 +1175,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       if (DOC.settings.theme) applyTheme(DOC.settings.theme);
       window.addEventListener('lu:opportunities-changed', publishGlobals);
       document.getElementById('root').innerHTML = '';
+      APP_READY = true;
       importPendingLinkedIn();
     } catch (err) {
       console.error('[Level Up] bootstrap failed:', err);

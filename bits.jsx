@@ -419,6 +419,21 @@ function JobIntel({ enrichment }) {
           </> : e.partial ? 'Not read yet — job page not opened' : 'Not named on the posting'}
         </span>
       </div>
+      {(e.reachOut && e.reachOut.length > 0 || e.reachOutNote) && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line-1)' }}>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>
+            People you can reach out to · LinkedIn
+          </div>
+          {(e.reachOut || []).map((r, i) => (
+            <div key={i} style={{ fontSize: 12.5, padding: '3px 0', lineHeight: 1.45 }}>
+              {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" style={introLink}>{r.name}</a> : <span style={{ color: 'var(--ink-1)' }}>{r.name}</span>}
+              {r.degree && <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginLeft: 6 }}>{r.degree}</span>}
+              {(r.reason || r.title) && <span style={{ color: 'var(--ink-3)' }}> · {r.reason || r.title}</span>}
+            </div>
+          ))}
+          {e.reachOutNote && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 4 }}>{e.reachOutNote} — see the job on LinkedIn for names.</div>}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12 }}>
         {e.jobUrl && <a href={e.jobUrl} target="_blank" rel="noopener noreferrer" style={introLink}>Job on LinkedIn ↗</a>}
         {e.companyUrl && <a href={e.companyUrl} target="_blank" rel="noopener noreferrer" style={introLink}>Company on LinkedIn ↗</a>}

@@ -34,11 +34,14 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
       people.push({ url: u, text: (c.innerText || '').slice(0, 200) });
     });
     var co = box.querySelector('a[href*="/company/"]');
-    return { id: id, text: (box.innerText || '').slice(0, 6000), people: people.slice(0, 8), companyUrl: co ? co.href : null };
+    return { id: id, text: (box.innerText || '').slice(0, 9000), people: people.slice(0, 15), companyUrl: co ? co.href : null };
   }
 
   var cur = (location.pathname.match(RX) || [])[1] || new URLSearchParams(location.search).get('currentJobId');
-  if (cur) { send('lijob', readJob(document, cur)); return; }
+  if (cur) {
+    if (!/about the job/i.test((document.querySelector('main') || document.body).innerText || '')) { alert('Level Up: scroll down this job page once so LinkedIn loads the description, then click again.'); return; }
+    send('lijob', readJob(document, cur)); return;
+  }
 
   var seen = {}, jobs = [];
   (document.querySelector('main') || document).querySelectorAll('a[href*="/jobs/view/"]').forEach(function (a) {
@@ -56,10 +59,14 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
   });
   if (!jobs.length) { alert('Level Up: no jobs found on this page. Open My Jobs → Saved (or a single job) and wait for it to load.'); return; }
 
+  // LinkedIn shows the Saved list 10 per page; note when more exist.
+  var savedTotal = +((((document.querySelector('main') || document.body).innerText || '').match(/Saved\s*·\s*(\d+)/) || [])[1] || 0);
+  var moreNote = savedTotal > jobs.length ? ' LinkedIn shows ' + savedTotal + ' saved jobs but only ' + jobs.length + ' are on this page — open the next page and click the bookmark again.' : '';
+
   var done = {};
   try { done = JSON.parse(localStorage.getItem(DONE_KEY) || '{}') || {}; } catch (e) { done = {}; }
   var todo = jobs.filter(function (j) { return !done[j.id]; }).slice(0, MAX_PER_RUN);
-  if (!todo.length) { send('lijobs', jobs); return; }
+  if (!todo.length) { if (moreNote) alert('Level Up:' + moreNote); send('lijobs', jobs); return; }
 
   window.__luSyncRunning = true;
   var ui = document.createElement('div');
@@ -71,7 +78,7 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
   document.body.appendChild(ui);
   var msg = ui.querySelector('[data-msg]'), fill = ui.querySelector('[data-fill]');
   var frame = document.createElement('iframe');
-  frame.style.cssText = 'position:fixed;top:0;left:0;width:1200px;height:2400px;opacity:0;pointer-events:none;z-index:-1;border:0';
+  frame.style.cssText = 'position:fixed;top:0;left:0;width:1200px;height:900px;opacity:0;pointer-events:none;z-index:-1;border:0';
   document.body.appendChild(frame);
 
   var i = 0, stopped = false, timer = null, poll = null;
@@ -79,7 +86,7 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
     stopped = true; clearTimeout(timer); clearInterval(poll);
     frame.remove(); window.__luSyncRunning = false;
     var read = jobs.filter(function (j) { return j.detail; }).length;
-    msg.textContent = 'Read ' + read + ' job page' + (read === 1 ? '' : 's') + '. ' + jobs.length + ' saved job' + (jobs.length === 1 ? '' : 's') + ' ready to send.';
+    msg.textContent = 'Read ' + read + ' job page' + (read === 1 ? '' : 's') + '. ' + jobs.length + ' saved job' + (jobs.length === 1 ? '' : 's') + ' ready to send.' + moreNote;
     fill.style.width = '100%';
     ui.querySelector('[data-stop]').remove();
     var b = document.createElement('button');
@@ -99,17 +106,32 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
     if (stopped) return;
     if (i >= todo.length) { finish(); return; }
     var j = todo[i], tries = 0;
-    msg.textContent = 'Reading job ' + (i + 1) + ' of ' + todo.length + '… keep this tab open.';
+    msg.textContent = 'Reading job ' + (i + 1) + ' of ' + todo.length + '… keep this tab in front.';
     frame.src = location.origin + '/jobs/view/' + j.id + '/';
     poll = setInterval(function () {
       if (stopped) { clearInterval(poll); return; }
+      // LinkedIn only loads the job details while this tab is on screen, so
+      // wait (without using up tries) whenever Dhruv switches away.
+      if (document.hidden) { msg.textContent = 'Paused — bring this LinkedIn tab back to the front to continue (job ' + (i + 1) + ' of ' + todo.length + ').'; return; }
+      msg.textContent = 'Reading job ' + (i + 1) + ' of ' + todo.length + '… keep this tab in front.';
       tries++;
       var d = null;
       try { d = frame.contentDocument; } catch (e) { d = null; }
       var box = d && (d.querySelector(BOX) || d.querySelector('main'));
+      // LinkedIn loads the description and "People you can reach out to" only as
+      // its inner panel scrolls, so scroll it a step each second until the end.
+      var sc = d && (d.querySelector('main#workspace') || d.querySelector('main'));
+      var atEnd = true;
       var txt = box ? (box.innerText || '') : '';
-      var ready = /about the job/i.test(txt) || txt.length > 2500;
-      if ((ready && tries >= 6) || tries >= 30) {
+      var ready = /about the job/i.test(txt);
+      if (sc) {
+        // At the bottom but not loaded yet: jump back to the top and come down again.
+        if (!ready && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 10) sc.scrollTop = 0;
+        else sc.scrollTop = sc.scrollTop + 500;
+        atEnd = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 10;
+        try { sc.dispatchEvent(new Event('scroll')); d.defaultView.scrollBy(0, 500); } catch (e) { /* not scrollable */ }
+      }
+      if ((ready && (atEnd || tries >= 12) && tries >= 4) || tries >= 30) {
         clearInterval(poll);
         if (ready) j.detail = readJob(d, j.id);
         i++;
@@ -120,7 +142,7 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
           if (stopped) return;
           var s = Math.ceil((end - Date.now()) / 1000);
           if (s <= 0) { next(); return; }
-          msg.textContent = 'Read ' + i + ' of ' + todo.length + '. Next job in ' + s + 's — keep this tab open.';
+          msg.textContent = 'Read ' + i + ' of ' + todo.length + '. Next job in ' + s + 's — keep this tab in front.';
           timer = setTimeout(tick, 1000);
         })();
       }
