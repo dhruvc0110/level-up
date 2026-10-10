@@ -377,18 +377,21 @@ function Sidebar({ view, onView, onAdd, personaChip, personas }) {
               {window.LU_USER && window.LU_USER.localMode ? 'This browser only' : 'Signed in with Google'}
             </div>
           </div>
-          <button onClick={signOut} disabled={signingOut}
-            title="Sign out"
-            style={{
-              appearance: 'none', background: 'transparent', border: 'none',
-              padding: 6, color: 'var(--ink-3)', cursor: 'pointer', borderRadius: 3,
-              display: 'flex', alignItems: 'center',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--ink-1)'}
-            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--ink-3)'}>
-            <Icon name="arrow-right" size={14}/>
-          </button>
         </div>
+        <button onClick={signOut} disabled={signingOut}
+          style={{
+            appearance: 'none', width: '100%', marginTop: 2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            padding: '7px 10px', borderRadius: 3, cursor: signingOut ? 'default' : 'pointer',
+            background: 'transparent', border: '1px solid var(--line-2)',
+            color: 'var(--ink-2)', fontSize: 12, fontWeight: 500, fontFamily: 'var(--sans)',
+            transition: 'all .12s', opacity: signingOut ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink-1)'; e.currentTarget.style.background = 'var(--bg-2)'; e.currentTarget.style.borderColor = 'var(--line-3)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-2)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line-2)'; }}>
+          <Icon name="arrow-right" size={12}/>
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
       </div>
     </aside>
   );
