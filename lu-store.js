@@ -36,17 +36,37 @@
   const params = new URLSearchParams(window.location.search);
   const LOCAL_MODE = params.get('local') === '1';
 
-  // The LinkedIn bookmark opens "#view=inbox&lijobs=<json>". Take the list and
-  // strip it from the address bar before the app reads the hash. The part after
-  // "#" never leaves the browser.
-  // A single job page sends "#…&lijob=<json>" (one job, full page text) instead.
-  let PENDING_LINKEDIN = null, PENDING_LINKEDIN_DETAIL = null;
+  // The LinkedIn bookmark opens "#view=inbox&lijobs=<json>" (Saved list) or
+  // "#…&lijob=<json>" (one job page). The part after "#" never leaves the
+  // browser. Each payload goes straight into a queue in this browser's storage
+  // and is removed only once processed, so a sign-in screen, a closed window or
+  // a second click arriving mid-import can't lose jobs.
+  const LS_LI_QUEUE = 'lu_linkedin_queue';
+  const memQueue = []; // used only if browser storage is blocked or full
+  function readQueue() {
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem(LS_LI_QUEUE) || '[]') || []; } catch (e) { q = []; }
+    return q.concat(memQueue.filter((m) => !q.some((x) => x.qid === m.qid)));
+  }
+  function enqueue(kind, data) {
+    const item = { qid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), kind, data, at: Date.now() };
+    try {
+      const q = JSON.parse(localStorage.getItem(LS_LI_QUEUE) || '[]') || [];
+      q.push(item);
+      localStorage.setItem(LS_LI_QUEUE, JSON.stringify(q));
+    } catch (e) { memQueue.push(item); }
+  }
+  function dequeue(qid) {
+    try { localStorage.setItem(LS_LI_QUEUE, JSON.stringify((JSON.parse(localStorage.getItem(LS_LI_QUEUE) || '[]') || []).filter((x) => x.qid !== qid))); } catch (e) { /* storage blocked */ }
+    const i = memQueue.findIndex((x) => x.qid === qid);
+    if (i >= 0) memQueue.splice(i, 1);
+  }
   function takeLinkedInPayload() {
     const m = window.location.hash.match(/(?:^#|&)lijobs=([^&]*)/);
     const d = window.location.hash.match(/(?:^#|&)lijob=([^&]*)/);
     if (!m && !d) return false;
-    try { if (m) { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) PENDING_LINKEDIN = j; } } catch (e) { /* malformed */ }
-    try { if (d) { const j = JSON.parse(decodeURIComponent(d[1])); if (j && j.id) PENDING_LINKEDIN_DETAIL = j; } } catch (e) { /* malformed */ }
+    try { if (m) { const j = JSON.parse(decodeURIComponent(m[1])); if (Array.isArray(j)) enqueue('list', j); } } catch (e) { /* malformed */ }
+    try { if (d) { const j = JSON.parse(decodeURIComponent(d[1])); if (j && j.id) enqueue('job', j); } } catch (e) { /* malformed */ }
     const rest = window.location.hash.replace(/&?lijobs?=[^&]*/g, '').replace(/^#&/, '#');
     history.replaceState(history.state, '', window.location.pathname + window.location.search + (rest === '#' ? '' : rest));
     return true;
@@ -55,7 +75,47 @@
   // If Level Up is already open in the bookmark's window, the next click only
   // changes the address after "#" (no reload), so pick jobs up from that too.
   let APP_READY = false;
-  window.addEventListener('hashchange', () => { if (takeLinkedInPayload() && APP_READY) importPendingLinkedIn(); });
+  window.addEventListener('hashchange', () => { if (takeLinkedInPayload()) processQueue(); });
+
+  // ── One active Level Up per browser ─────────────────────────────────────
+  // Two open copies would each save their own version and overwrite the other.
+  // A newly opened copy asks the others to save and pause first.
+  const TAB_ID = Math.random().toString(36).slice(2);
+  let PASSIVE = false, RELEASING = false;
+  const BC = ('BroadcastChannel' in window) ? new BroadcastChannel('levelup-' + (LOCAL_MODE ? 'local' : 'drive')) : null;
+  if (BC) {
+    BC.addEventListener('message', async (e) => {
+      const msg = e.data || {};
+      if (msg.type !== 'claim' || msg.tab === TAB_ID || !APP_READY || PASSIVE || RELEASING) return;
+      BC.postMessage({ type: 'busy', to: msg.tab });
+      RELEASING = true;
+      try { await flush(); } catch (err) { /* best effort */ }
+      PASSIVE = true;
+      BC.postMessage({ type: 'released', to: msg.tab });
+      showPaused();
+    });
+  }
+  async function claimActive() {
+    if (!BC) return;
+    let busy = 0, released = 0;
+    const on = (e) => { const m = e.data || {}; if (m.to !== TAB_ID) return; if (m.type === 'busy') busy++; if (m.type === 'released') released++; };
+    BC.addEventListener('message', on);
+    BC.postMessage({ type: 'claim', tab: TAB_ID });
+    await new Promise((r) => setTimeout(r, 250));
+    const t0 = Date.now();
+    while (released < busy && Date.now() - t0 < 8000) await new Promise((r) => setTimeout(r, 100));
+    BC.removeEventListener('message', on);
+  }
+  function showPaused() {
+    const o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:var(--bg-0);color:var(--ink-1);display:flex;align-items:center;justify-content:center;padding:32px;font:14px/1.55 Geist,-apple-system,sans-serif;';
+    o.innerHTML = '<div style="max-width:420px;text-align:center"><div style="font-family:Newsreader,Georgia,serif;font-size:24px;margin-bottom:10px">Level Up is open in another window</div>'
+      + '<p style="color:var(--ink-2);margin:0 0 20px">This copy is paused so the two can\'t overwrite each other. Everything you did here was saved.</p>'
+      + '<button style="' + BTN_PRIMARY + '">Use Level Up here</button></div>';
+    o.querySelector('button').onclick = () => window.location.reload();
+    document.body.appendChild(o);
+  }
+
   const LS_TOKEN = 'lu_google_token';
   const LS_LOCAL_DOC = 'lu_local_doc';
 
@@ -337,12 +397,14 @@
   // Debounced autosave. Every change marks dirty; we write ~0.8s later.
   let dirty = false, saving = null, saveTimer = null;
   function markDirty() {
+    if (PASSIVE) return;
     dirty = true;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flush, 800);
   }
   async function flush() {
     clearTimeout(saveTimer);
+    if (PASSIVE) return;
     if (saving) { await saving; }
     if (!dirty) return;
     dirty = false;
@@ -568,6 +630,7 @@ company_size and industry come from what you know about the company; use null if
     let added = 0, enriched = 0, skipped = 0, n = 0;
     const errors = [];
     for (const j of (jobs || []).slice(0, 100)) {
+      if (PASSIVE || RELEASING) throw new Error('Paused: Level Up opened in another window');
       const jobId = String(j && j.id || '').replace(/\D/g, '');
       if (!jobId) continue;
       const id = 'li-' + jobId;
@@ -617,6 +680,7 @@ company_size and industry come from what you know about the company; use null if
       row.parseStatus = row.parsed.is_opportunity ? 'parsed' : 'not_opportunity';
       row.parsedAt = nowIso();
       markDirty();
+      await flush(); // save after every job, so an interruption loses nothing
     }
     await flush();
     return { added, enriched, skipped, errors };
@@ -752,36 +816,46 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     return { row, opp, enrichment };
   }
 
-  async function importPendingLinkedInDetail() {
-    if (!PENDING_LINKEDIN_DETAIL) return;
-    const job = PENDING_LINKEDIN_DETAIL; PENDING_LINKEDIN_DETAIL = null;
+  async function handleJobPage(job) {
     pill('Reading the job page…');
-    try {
-      const { row, opp } = await enrichLinkedInJob(job);
-      const what = [(row.parsed && row.parsed.role), (row.parsed && row.parsed.company)].filter(Boolean).join(' at ') || 'job';
-      pill(opp ? `Updated in Pipeline: ${what}` : `Enriched in Inbox: ${what}`);
-      window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
-      if (opp) window.dispatchEvent(new CustomEvent('lu:open-opp', { detail: opp.id }));
-      researchMissing();
-    } catch (err) {
-      pill('LinkedIn enrichment failed — ' + err.message, 'error');
-    }
+    const { row, opp } = await enrichLinkedInJob(job);
+    const what = [(row.parsed && row.parsed.role), (row.parsed && row.parsed.company)].filter(Boolean).join(' at ') || 'job';
+    pill(opp ? `Updated in Pipeline: ${what}` : `Enriched in Inbox: ${what}`);
+    window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+    if (opp) window.dispatchEvent(new CustomEvent('lu:open-opp', { detail: opp.id }));
   }
-
-  async function importPendingLinkedIn() {
-    importPendingLinkedInDetail();
-    if (!PENDING_LINKEDIN) return;
-    const jobs = PENDING_LINKEDIN; PENDING_LINKEDIN = null;
-    try {
-      const r = await importLinkedInJobs(jobs);
-      pill((r.added || r.enriched)
-        ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here`].filter(Boolean).join(' · ')
-        : `No new jobs · ${r.skipped} already in Level Up`);
-      window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
-      researchMissing();
-    } catch (err) {
-      pill('LinkedIn import failed — ' + err.message, 'error');
-    }
+  async function handleSavedList(jobs) {
+    const r = await importLinkedInJobs(jobs);
+    pill((r.added || r.enriched)
+      ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here`].filter(Boolean).join(' · ')
+      : `No new jobs · ${r.skipped} already in Level Up`);
+    window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+  }
+  // Works through the queue one payload at a time, oldest first.
+  let queueRunning = null;
+  function processQueue() {
+    if (!APP_READY || PASSIVE || RELEASING) return queueRunning;
+    if (queueRunning) return queueRunning.then(() => processQueue());
+    queueRunning = (async () => {
+      let did = false;
+      try {
+        let item;
+        while (!PASSIVE && !RELEASING && (item = readQueue()[0])) {
+          try {
+            if (item.kind === 'job') await handleJobPage(item.data);
+            else await handleSavedList(item.data);
+          } catch (err) {
+            if (PASSIVE || RELEASING) break; // another window took over; it will finish this
+            pill('LinkedIn import failed — ' + err.message, 'error');
+          }
+          if (PASSIVE || RELEASING) break;
+          dequeue(item.qid);
+          did = true;
+        }
+      } finally { queueRunning = null; }
+      if (did) researchMissing();
+    })();
+    return queueRunning;
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -1300,6 +1374,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     try {
       if (!LOCAL_MODE && !storedToken()) await signInScreen();
       screen('<p style="color:var(--ink-2);margin:0;">Loading your data…</p>');
+      await claimActive(); // other open copies save and pause before we read
       let raw = await store.load();
       if (!raw) {
         DOC = await firstRun();
@@ -1316,7 +1391,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       window.addEventListener('lu:opportunities-changed', publishGlobals);
       document.getElementById('root').innerHTML = '';
       APP_READY = true;
-      importPendingLinkedIn();
+      processQueue();
     } catch (err) {
       console.error('[Level Up] bootstrap failed:', err);
       if (!LOCAL_MODE && (err.status === 401 || err.status === 403)) localStorage.removeItem(LS_TOKEN);
