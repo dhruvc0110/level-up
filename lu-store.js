@@ -631,7 +631,7 @@ Output a SINGLE JSON object, no prose around it:
   "next_action": "short phrase" | null
 }
 
-Rules: company_size comes from the page ("About the company"); if absent, give your best estimate and set company_size_estimated true, or null if you don't know the company. hiring_manager only if the page names one. reach_out: named people from "People you can reach out to", plus company employees shown with 1st or 2nd degree; best first, max 6; [] if none. Each person's reason is only the text shown with that person. A group line with no name (e.g. "School alumni from X · Show all") goes in reach_out_note, never on a person. Every profile_url MUST be copied exactly from the provided list, else null. Never invent people.`;
+Rules: company_size comes from the page ("About the company"); if absent, give your best estimate and set company_size_estimated true, or null if you don't know the company. hiring_manager only if the page names one. reach_out: named people from "People you can reach out to" and from the "IN YOUR NETWORK" block (LinkedIn's full list: "Connections who work at X" are 1st-degree, reason "Connection at X"; "Company alumni who work at X / Used to work at Y" get reason "Fellow Y alum at X"; "School alumni" get reason "Fellow <school> alum"), plus company employees shown with 1st or 2nd degree. Order 1st-degree first, then 2nd, then others; max 10; [] if none. Each person's reason is only the text shown with that person. A group line with no name (e.g. "School alumni from X · Show all") goes in reach_out_note, never on a person. Every profile_url MUST be copied exactly from the provided list, else null. Never invent people.`;
 
   const normCompany = (s) => String(s || '').toLowerCase()
     .replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ')
@@ -679,7 +679,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     // note for the job, not a reason attached to one person.
     const GROUP_LINE = /(school alumni|company alumni|alumni) from [^\n;·]+/i;
     const groupMatch = text.match(new RegExp('^\\s*(?:' + GROUP_LINE.source + ')\\s*$', 'im'));
-    const reachOut = (Array.isArray(d.reach_out) ? d.reach_out : []).filter((r) => r && r.name).slice(0, 6).map((r) => {
+    const reachOut = (Array.isArray(d.reach_out) ? d.reach_out : []).filter((r) => r && r.name).slice(0, 10).map((r) => {
       const u = String(r.profile_url || '').split('?')[0];
       let reason = String(r.reason || '');
       if (groupMatch) reason = reason.split(/;\s*/).filter((part) => !part.toLowerCase().includes(groupMatch[0].trim().toLowerCase())).join('; ');

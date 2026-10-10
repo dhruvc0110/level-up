@@ -16,7 +16,7 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
   if (window.__luSyncRunning) { alert('Level Up: a sync is already running in this tab.'); return; }
   var RX = /\/jobs\/view\/(\d+)/;
   var BOX = '.jobs-search__job-details--wrapper,.jobs-search__job-details--container,.jobs-details,.job-view-layout';
-  var DONE_KEY = 'levelup_enriched_jobs';
+  var DONE_KEY = 'levelup_enriched_jobs_v2'; // v2: v1 marked jobs Level Up never received (open-window bug)
   var MAX_PER_RUN = 30;
   var idOf = function (a) { return (String(a.href).match(RX) || [])[1]; };
   var go = function (u) { if (!window.open(u, 'levelup')) alert('Level Up: allow pop-ups for linkedin.com, then click again.'); };
@@ -37,10 +37,47 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
     return { id: id, text: (box.innerText || '').slice(0, 9000), people: people.slice(0, 15), companyUrl: co ? co.href : null };
   }
 
+  // "People you can reach out to" → "Show all" opens an "In your network" list
+  // (connections and alumni at the company, with names and degree).
+  function findShowAll(doc) {
+    var links = doc.querySelectorAll('a, button');
+    for (var k = 0; k < links.length; k++) {
+      if (!/^\s*show all\s*$/i.test(links[k].textContent || '')) continue;
+      var c = links[k];
+      for (var n = 0; n < 6 && c.parentElement; n++) { c = c.parentElement; if (/people you can reach out to/i.test(c.textContent || '')) return links[k]; }
+    }
+    return null;
+  }
+  function readNetwork(doc) {
+    var heads = [].filter.call(doc.querySelectorAll('h1,h2,h3,span,div,p'), function (e) { return /^\s*in your network\s*$/i.test(e.textContent || ''); });
+    if (!heads.length) return null;
+    var cont = heads[heads.length - 1];
+    for (var n = 0; n < 8 && cont.parentElement && !cont.querySelector('a[href*="/in/"]'); n++) cont = cont.parentElement;
+    if (!cont.querySelector('a[href*="/in/"]')) return null;
+    var people = [], seenN = {};
+    cont.querySelectorAll('a[href*="/in/"]').forEach(function (a) {
+      var u = String(a.href).split('?')[0];
+      if (!/linkedin\.com\/in\//.test(u) || seenN[u]) return;
+      seenN[u] = 1;
+      var c = a;
+      for (var i = 0; i < 6 && c.parentElement && (c.textContent || '').trim().length < 50; i++) c = c.parentElement;
+      people.push({ url: u, text: (c.innerText || c.textContent || '').slice(0, 200) });
+    });
+    return { text: (cont.innerText || cont.textContent || '').slice(0, 3000), people: people.slice(0, 20) };
+  }
+  function withNetwork(detail, net) {
+    if (!net) return detail;
+    detail.text += '\n\nIN YOUR NETWORK (LinkedIn "Show all"):\n' + net.text;
+    var have = {};
+    detail.people.forEach(function (p) { have[p.url] = 1; });
+    detail.people = net.people.filter(function (p) { return !have[p.url]; }).concat(detail.people).slice(0, 25);
+    return detail;
+  }
+
   var cur = (location.pathname.match(RX) || [])[1] || new URLSearchParams(location.search).get('currentJobId');
   if (cur) {
     if (!/about the job/i.test((document.querySelector('main') || document.body).innerText || '')) { alert('Level Up: scroll down this job page once so LinkedIn loads the description, then click again.'); return; }
-    send('lijob', readJob(document, cur)); return;
+    send('lijob', withNetwork(readJob(document, cur), readNetwork(document))); return;
   }
 
   var seen = {}, jobs = [];
@@ -105,7 +142,7 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
   function next() {
     if (stopped) return;
     if (i >= todo.length) { finish(); return; }
-    var j = todo[i], tries = 0;
+    var j = todo[i], tries = 0, phase = 'load', netTries = 0;
     msg.textContent = 'Reading job ' + (i + 1) + ' of ' + todo.length + '… keep this tab in front.';
     frame.src = location.origin + '/jobs/view/' + j.id + '/';
     poll = setInterval(function () {
@@ -131,9 +168,21 @@ window.LU_LINKEDIN_BOOKMARKLET = function (APP, PACE_MS) {
         atEnd = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 10;
         try { sc.dispatchEvent(new Event('scroll')); d.defaultView.scrollBy(0, 500); } catch (e) { /* not scrollable */ }
       }
-      if ((ready && (atEnd || tries >= 12) && tries >= 4) || tries >= 30) {
+      if (phase === 'load' && ready && (atEnd || tries >= 12) && tries >= 4) {
+        var show = findShowAll(d);
+        if (show) { try { show.click(); } catch (e) { /* ignore */ } phase = 'network'; return; }
+        phase = 'done';
+      }
+      if (phase === 'network') {
+        netTries++;
+        var net = readNetwork(d);
+        if (!net && netTries < 6) return;
+        j.detail = withNetwork(readJob(d, j.id), net);
+        phase = 'done';
+      }
+      if (phase === 'done' || tries >= 30) {
         clearInterval(poll);
-        if (ready) j.detail = readJob(d, j.id);
+        if (ready && !j.detail) j.detail = readJob(d, j.id);
         i++;
         fill.style.width = Math.round((i / todo.length) * 100) + '%';
         if (i >= todo.length) { finish(); return; }
