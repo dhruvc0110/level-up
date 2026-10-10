@@ -117,6 +117,7 @@
   }
 
   const LS_TOKEN = 'lu_google_token';
+  const LS_ACCOUNT = 'lu_google_account'; // last signed-in email: skips the consent screen on renewals
   const LS_LOCAL_DOC = 'lu_local_doc';
 
   // ── Static config the screens expect ────────────────────────────────────
@@ -264,9 +265,12 @@
         },
       });
     }
-    const prev = (() => { try { return JSON.parse(localStorage.getItem(LS_TOKEN) || 'null'); } catch (e) { return null; } })();
+    const prevTok = (() => { try { return JSON.parse(localStorage.getItem(LS_TOKEN) || 'null'); } catch (e) { return null; } })();
+    const known = (() => { try { return localStorage.getItem(LS_ACCOUNT); } catch (e) { return null; } })();
+    const prev = prevTok || (known ? { email: known } : null);
     const resp = await new Promise((resolve, reject) => {
       pendingToken = { resolve, reject };
+      // Already granted before: no consent screen, the window closes by itself.
       tokenClient.requestAccessToken({ prompt: prev ? '' : 'consent', login_hint: prev && prev.email ? prev.email : undefined });
     });
     const granted = resp.scope || '';
@@ -280,26 +284,52 @@
         localStorage.setItem(LS_TOKEN, JSON.stringify(tok));
       } catch (e) { /* non-fatal */ }
     }
+    if (tok.email) { try { localStorage.setItem(LS_ACCOUNT, tok.email); } catch (e) { /* storage blocked */ } }
     return tok;
   }
 
   // When the 1-hour token expires mid-session, a browser popup must come
   // from a tap — so show a small "Continue" banner and wait for the tap.
-  let reauthPromise = null;
+  let reauthPromise = null, reauthDone = null, reauthBar = null;
+  function finishReauth(tok) {
+    if (reauthBar) { reauthBar.remove(); reauthBar = null; }
+    const done = reauthDone; reauthPromise = null; reauthDone = null;
+    if (done) done(tok);
+  }
   function reauthViaBanner() {
     if (reauthPromise) return reauthPromise;
     reauthPromise = new Promise((resolve, reject) => {
-      const bar = document.createElement('div');
+      reauthDone = resolve;
+      const bar = reauthBar = document.createElement('div');
       bar.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:10000;display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg-2);border:1px solid var(--line-3);border-radius:4px;color:var(--ink-1);font:13px Geist,-apple-system,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.5);';
-      bar.innerHTML = '<span>Google session expired.</span><button style="padding:7px 12px;border:0;border-radius:3px;background:var(--ink-1);color:var(--bg-0);font:500 13px Geist,sans-serif;cursor:pointer;">Continue</button>';
+      bar.innerHTML = '<span>Google connection timed out — your work is waiting to save.</span><button style="padding:7px 12px;border:0;border-radius:3px;background:var(--ink-1);color:var(--bg-0);font:500 13px Geist,sans-serif;cursor:pointer;">Reconnect</button>';
       document.body.appendChild(bar);
       bar.querySelector('button').addEventListener('click', async () => {
-        try { const t = await requestToken(); bar.remove(); reauthPromise = null; resolve(t); }
-        catch (e) { bar.querySelector('span').textContent = 'Sign-in failed: ' + e.message; }
+        try { finishReauth(await requestToken()); }
+        catch (e) { bar.querySelector('span').textContent = 'Reconnect failed: ' + e.message; }
       });
     });
     return reauthPromise;
   }
+
+  // Google gives browser-only apps a 1-hour pass, and renewing it needs a
+  // click (browsers block pop-ups otherwise). So: any click in the last 10
+  // minutes of the pass, or after it ran out, quietly renews it. The Google
+  // window flashes and closes by itself.
+  let renewing = false;
+  document.addEventListener('click', (e) => {
+    if (LOCAL_MODE || renewing || !APP_READY) return;
+    if (reauthBar && reauthBar.contains(e.target)) return; // the Reconnect button handles itself
+    let t = null;
+    try { t = JSON.parse(localStorage.getItem(LS_TOKEN) || 'null'); } catch (e) { t = null; }
+    const known = (() => { try { return localStorage.getItem(LS_ACCOUNT); } catch (e) { return null; } })();
+    if (!t && !known) return;
+    if (t && t.expires_at - Date.now() > 10 * 60_000) return;
+    renewing = true;
+    requestToken().then((tok) => { pill('Google connection renewed'); finishReauth(tok); })
+      .catch(() => { /* closed or blocked: the Reconnect bar still works */ })
+      .finally(() => { renewing = false; });
+  }, true);
 
   async function getToken() {
     return storedToken() || reauthViaBanner();
@@ -1314,6 +1344,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       if (tok && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(tok.access_token, () => {});
     } catch (e) { /* ignore */ }
     localStorage.removeItem(LS_TOKEN);
+    try { localStorage.removeItem(LS_ACCOUNT); } catch (e) { /* storage blocked */ }
     window.location.replace(window.location.pathname);
   }
 
@@ -1354,7 +1385,10 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   }
 
   async function signInScreen(message) {
-    screen(`
+    const known = (() => { try { return localStorage.getItem(LS_ACCOUNT); } catch (e) { return null; } })();
+    screen(known ? `
+      <p style="color:var(--ink-2);margin:0 0 6px;">Welcome back. Google signs browser apps out after an hour — one click reconnects, no password needed.</p>
+      <button id="lu-signin" style="${BTN_PRIMARY}">Continue as ${esc(known)}</button>` : `
       <p style="color:var(--ink-2);margin:0 0 6px;">Sign in with the Google account that holds your Level Up data.</p>
       <button id="lu-signin" style="${BTN_PRIMARY}">Continue with Google</button>
       <div id="lu-err" style="margin-top:12px;color:oklch(64% 0.16 25);font-size:12.5px;">${esc(message || '')}</div>
@@ -1364,7 +1398,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       btn.textContent = 'Waiting for Google…'; btn.disabled = true;
       try { return await requestToken(); }
       catch (e) {
-        btn.textContent = 'Continue with Google'; btn.disabled = false;
+        btn.textContent = known ? 'Continue as ' + known : 'Continue with Google'; btn.disabled = false;
         document.getElementById('lu-err').textContent = e.message;
       }
     }
