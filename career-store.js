@@ -21,7 +21,8 @@
 
   // ── Text helpers ────────────────────────────────────────────────────────
   const norm = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const normCo = (s) => norm(s).replace(/\b(the|inc|llc|ltd|plc|corp|corporation|co|company|group|holdings|limited)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  // "Cognizant Consulting" = "Cognizant"; "KPMG Global Services" = "KPMG Consulting"; "Infosys Technologies" = "Infosys".
+  const normCo = (s) => norm(s).replace(/\b(the|inc|llc|llp|lp|ltd|plc|corp|corporation|co|company|group|holdings|limited|consulting|global services|services|technologies|technology|solutions|international|india)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const STOP = new Set('a an the and or of to for in on at by with from as is was were be been our my their its into over across per via led lead leading'.split(' '));
   const tokens = (s) => new Set(norm(s).split(' ').filter((w) => w && !STOP.has(w)));
   function similarity(a, b) {
@@ -35,6 +36,34 @@
   const initials = (s) => norm(s).split(' ').filter((w) => w && !['of', 'and', 'the', 'for'].includes(w)).map((w) => w[0]).join('');
   const ABBR = { vp: 'vice president', svp: 'senior vice president', evp: 'executive vice president', md: 'managing director', gm: 'general manager', sr: 'senior', dir: 'director' };
   const expand = (s) => norm(s).split(' ').map((w) => ABBR[w] || w).join(' ');
+  const PLACE = { uk: 'united kingdom', us: 'united states', usa: 'united states', uae: 'united arab emirates', tx: 'texas', ny: 'new york' };
+  const placeTokens = (s) => new Set(norm(s).split(' ').map((w) => PLACE[w] || w).join(' ').split(' ').filter((w) => w && w !== 'and'));
+  const digits = (s) => String(s || '').replace(/\D/g, '');
+  const bareUrl = (s) => String(s || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+  const monthIndex = (d) => { const m = String(d || '').match(/^(\d{4})-(\d{2})/); return m ? +m[1] * 12 + (+m[2] - 1) : null; };
+  // Same value for a given field, ignoring formatting differences.
+  function sameField(key, a, b) {
+    if (same(a, b)) return true;
+    if (key === 'phone') return digits(a).slice(-10) === digits(b).slice(-10);
+    if (key === 'title') {
+      // "Director" vs "Consulting Director": one title contains the other.
+      const A = tokens(expand(a)), B = tokens(expand(b));
+      const sub = (x, y) => x.size && [...x].every((w) => y.has(w));
+      return sub(A, B) || sub(B, A);
+    }
+    if (key === 'linkedin' || key === 'website') return bareUrl(a) === bareUrl(b);
+    if (/location|geography/.test(key)) {
+      // One place description contained in the other ("United States" ⊂ "Plano, Texas, United States").
+      const A = placeTokens(a), B = placeTokens(b);
+      const sub = (x, y) => [...x].every((w) => y.has(w));
+      return sub(A, B) || sub(B, A);
+    }
+    if (key === 'start' || key === 'end') {
+      const x = monthIndex(a), y = monthIndex(b);
+      return x != null && y != null && Math.abs(x - y) <= 2; // job-change months differ by a month between sources
+    }
+    return false;
+  }
   const same = (a, b) => {
     if (norm(a) === norm(b) || expand(a) === expand(b)) return true;
     // "2019" vs "2019-03": the less precise date agrees with the more precise one.
@@ -95,13 +124,16 @@ ${personas || '- (none yet)'}
 
 Rules:
 - Faithful extraction only. Never invent, embellish or infer facts, numbers, dates or employers. Keep numbers exactly as written ("$480M", "1,200 people").
-- One achievement per bullet/claim. Keep the wording close to the source; you may tidy grammar.
+- One item per bullet/claim. Keep the wording close to the source; you may tidy grammar.
+- kind: "outcome" (a result delivered: numbers, wins, launches, delivered programs), "responsibility" (scope or remit: "responsible for…", "practice leader with ownership of…") or "inflight" (work in progress, "key outcomes in flight").
+- Client engagements described as delivered work are outcomes. Keep client anonymity exactly as written ("one of the largest retailers").
 - metrics: only numbers stated in that achievement.
 - themes: 1-3 short business themes per achievement (2-4 words, lowercase, e.g. "erp modernization", "cost reduction", "m&a integration"). Reuse these existing themes when they fit: ${themes || '(none yet)'}.
 - skills: 1-4 capabilities shown (e.g. "Vendor governance", "Board reporting"). Reuse existing when they fit: ${skills || '(none yet)'}.
 - personas: ids of the personas each achievement best supports (0-3).
 - Dates as "YYYY-MM" or "YYYY"; a current role ends "present".
-- Scope fields only if stated (pnl, budget, team, geography), as short strings.
+- Scope fields only if stated (pnl, budget, team, geography), as short strings ("100+ practitioners", "global").
+- expertise: everything listed as skills, competencies, industries, business processes, platforms/technologies, market offerings, languages. level = the person's own 1-5 rating if shown (count filled dots), else null. Don't repeat an item within a type.
 
 Output a SINGLE JSON object, no prose around it:
 {
@@ -109,8 +141,9 @@ Output a SINGLE JSON object, no prose around it:
   "summary": "professional summary text, or null",
   "roles": [ { "company": "", "title": "", "start": "", "end": "", "location": null,
       "scope": { "pnl": null, "budget": null, "team": null, "geography": null }, "summary": null,
-      "achievements": [ { "text": "", "metrics": [ { "label": "", "value": "" } ], "skills": [], "themes": [], "personas": [] } ] } ],
-  "education": [ { "school": "", "degree": null, "field": null, "year": null } ],
+      "achievements": [ { "text": "", "kind": "outcome", "metrics": [ { "label": "", "value": "" } ], "skills": [], "themes": [], "personas": [] } ] } ],
+  "expertise": [ { "type": "capability|industry|process|platform|offering|language", "name": "", "category": null, "level": null } ],
+  "education": [ { "school": "", "degree": null, "field": null, "year": null, "honors": null } ],
   "boards": [ { "org": "", "role": null, "start": null, "end": null } ],
   "publications": [ { "title": "", "venue": null, "year": null, "url": null } ],
   "credentials": [ { "name": "", "issuer": null, "year": null } ]
@@ -144,16 +177,17 @@ Output a SINGLE JSON object, no prose around it:
     });
     return bestScore >= 0.5 ? best : null;
   }
+  const VARIANT_FIELDS = ['headline', 'summary'];
   function fieldChanges(existing, incoming, fields) {
     const out = [];
     fields.forEach(([key, label]) => {
       const get = (o) => key.split('.').reduce((v, k) => (v == null ? v : v[k]), o);
       const a = get(existing), b = get(incoming);
       if (blank(b)) return;
-      // A shorter version of the same place ("Dallas" vs "Dallas, TX") isn't a conflict.
-      const placeMatch = /location|geography/.test(key) && (norm(a).startsWith(norm(b)) || norm(b).startsWith(norm(a)));
       if (blank(a)) out.push({ key, label, from: null, to: b, kind: 'fill', accept: true });
-      else if (!same(a, b) && !placeMatch) out.push({ key, label, from: a, to: b, kind: 'conflict', choice: 'keep' });
+      // Headlines and summaries differ by design between resume versions: variants, not conflicts.
+      else if (VARIANT_FIELDS.includes(key)) return;
+      else if (!sameField(key, a, b)) out.push({ key, label, from: a, to: b, kind: 'conflict', choice: 'keep' });
     });
     return out;
   }
@@ -169,17 +203,46 @@ Output a SINGLE JSON object, no prose around it:
     if (bestScore >= 0.38) return { status: 'similar', existing: best };
     return { status: 'new', existing: null };
   }
+  const KINDS = ['outcome', 'responsibility', 'inflight'];
   const cleanAch = (a) => ({
     text: String(a.text || '').trim(),
+    kind: KINDS.includes(a.kind) ? a.kind : 'outcome',
     metrics: (Array.isArray(a.metrics) ? a.metrics : []).filter((m) => m && m.value).map((m) => ({ label: String(m.label || ''), value: String(m.value) })),
     skills: (Array.isArray(a.skills) ? a.skills : []).map(String).filter(Boolean).slice(0, 6),
     themes: (Array.isArray(a.themes) ? a.themes : []).map((t) => String(t).toLowerCase()).filter(Boolean).slice(0, 4),
     personas: (Array.isArray(a.personas) ? a.personas : []).map(String).filter((id) => (core().doc().personas || []).some((p) => p.id === id)),
   });
 
-  function listProposal(kind, items, keyFn) {
+  const EXPERTISE_TYPES = ['capability', 'industry', 'process', 'platform', 'offering', 'language'];
+  // Degrees and schools written differently: "BE" = "Bachelor of Engineering", "IIM Lucknow" = "Indian Institute of Management, Lucknow".
+  const DEGREE = { be: 'bachelor of engineering', btech: 'bachelor of technology', bs: 'bachelor of science', bsc: 'bachelor of science', ba: 'bachelor of arts', ms: 'master of science', msc: 'master of science', mba: 'master of business administration', phd: 'doctor of philosophy' };
+  const degreeKey = (d) => { const n = norm(d).replace(/ /g, ''); return DEGREE[n] || norm(d); };
+  function sameSchool(a, b) {
+    if (!a || !b) return false;
+    const A = norm(a), B = norm(b);
+    if (A === B) return true;
+    const words = (s) => s.split(' ').filter((w) => !['of', 'the', 'and'].includes(w));
+    // "IIM Lucknow": first word is the acronym of the other's leading words, the rest matches.
+    const tryAcr = (short, long) => {
+      const sw = words(short), lw = words(long);
+      const acr = sw[0]; const rest = sw.slice(1).join(' ');
+      for (let k = 2; k <= lw.length; k++) {
+        if (lw.slice(0, k).map((w) => w[0]).join('') === acr && lw.slice(k).join(' ') === rest) return true;
+      }
+      return false;
+    };
+    return tryAcr(A, B) || tryAcr(B, A) || similarity(a, b) >= 0.6;
+  }
+  function educationProposal(items) {
+    return (Array.isArray(items) ? items : []).filter((x) => x && (x.school || x.degree)).map((x) => {
+      const existing = C().education.find((e) => (x.school ? sameSchool(e.school, x.school) : true) && (!x.degree || !e.degree || degreeKey(e.degree) === degreeKey(x.degree)) && (x.school || e.degree));
+      return { status: existing ? 'known' : 'new', data: x, existingId: existing && existing.id, accept: !existing && !!x.school };
+    });
+  }
+  function listProposal(kind, items, keyFn, aliasKeys) {
     return (Array.isArray(items) ? items : []).filter((x) => x && !blank(keyFn(x))).map((x) => {
-      const existing = C()[kind].find((e) => norm(keyFn(e)) === norm(keyFn(x)));
+      const k = norm(keyFn(x));
+      const existing = C()[kind].find((e) => norm(keyFn(e)) === k || (aliasKeys && aliasKeys(e).some((a) => norm(a) === k)));
       return { status: existing ? 'known' : 'new', data: x, existingId: existing && existing.id, accept: !existing };
     });
   }
@@ -192,10 +255,14 @@ Output a SINGLE JSON object, no prose around it:
       summary: null,
       roles: [],
       lists: {
-        education: listProposal('education', e.education, (x) => x.school + ' ' + (x.degree || '')),
+        education: educationProposal(e.education),
         boards: listProposal('boards', e.boards, (x) => x.org),
         publications: listProposal('publications', e.publications, (x) => x.title),
         credentials: listProposal('credentials', e.credentials, (x) => x.name),
+        expertise: listProposal('expertise', (Array.isArray(e.expertise) ? e.expertise : [])
+          .filter((x) => x && x.name && EXPERTISE_TYPES.includes(x.type))
+          .map((x) => ({ type: x.type, name: String(x.name).trim(), category: x.category || null, level: Number.isFinite(+x.level) && +x.level > 0 ? Math.min(5, Math.round(+x.level)) : null })),
+          (x) => x.type + ' ' + String(x.name).toLowerCase().replace(/[^a-z0-9]/g, ''), (e) => (e.aliases || []).map((a) => e.type + ' ' + String(a).toLowerCase().replace(/[^a-z0-9]/g, ''))),
       },
     };
     if (!blank(e.summary)) {
@@ -243,6 +310,8 @@ Output a SINGLE JSON object, no prose around it:
     changes.forEach((x) => {
       if ((x.kind === 'fill' && x.accept) || (x.kind === 'conflict' && x.choice === 'new')) setPath(target, x.key, x.to);
       if (x.kind === 'conflict' && x.choice === 'later') {
+        const entityId = target.id || null;
+        if (C().conflicts.some((cf) => cf.entityId === entityId && cf.key === x.key && sameField(x.key, cf.proposed, x.to))) return; // already waiting for you
         C().conflicts.push({ id: uid('cf'), entity: target === C().person ? 'person' : 'role', entityId: target.id || null, key: x.key, label: x.label, current: x.from, proposed: x.to, sourceId: sid, createdAt: now() });
       }
     });
@@ -274,12 +343,7 @@ Output a SINGLE JSON object, no prose around it:
       r.achievements.forEach((a) => {
         if (a.status === 'known' || (a.status === 'similar' && a.mode === 'same')) {
           const ex = c.achievements.find((x) => x.id === a.existingId);
-          if (ex) {
-            addSrc(ex, src.id); ex.confirmedAt = t;
-            ['skills', 'themes', 'personas'].forEach((k) => { ex[k] = [...new Set([...(ex[k] || []), ...(a.data[k] || [])])]; });
-            if (!(ex.metrics || []).length && a.data.metrics.length) ex.metrics = a.data.metrics;
-            counts.confirmed++;
-          }
+          if (ex) { mergeInto(ex, a.data, src.id); counts.confirmed++; }
           return;
         }
         if (!a.accept) return;
@@ -288,7 +352,14 @@ Output a SINGLE JSON object, no prose around it:
       });
     });
     Object.entries(p.lists).forEach(([kind, items]) => items.forEach((x) => {
-      if (x.status === 'known') { const ex = c[kind].find((e) => e.id === x.existingId); if (ex) { addSrc(ex, src.id); ex.confirmedAt = t; counts.confirmed++; } return; }
+      if (x.status === 'known') {
+        const ex = c[kind].find((e) => e.id === x.existingId);
+        if (ex) {
+          addSrc(ex, src.id); ex.confirmedAt = t; counts.confirmed++;
+          Object.keys(x.data).forEach((k) => { if (blank(ex[k]) && !blank(x.data[k])) ex[k] = x.data[k]; });
+        }
+        return;
+      }
       if (!x.accept) return;
       c[kind].push(Object.assign({ id: uid(kind.slice(0, 3)) }, x.data, { sources: [src.id], confirmedAt: t, updatedAt: t }));
       counts.added++;
@@ -299,31 +370,141 @@ Output a SINGLE JSON object, no prose around it:
     window.dispatchEvent(new CustomEvent('lu:career-changed'));
     return counts;
   }
+  window.LU_CAREER_EXPERTISE_TYPES = EXPERTISE_TYPES;
 
   // Same achievement in different words ("turned around a failing WMS rollout" =
-  // "rescued a stalled warehouse-management program"): one quick Claude check per
-  // import, only for new items in roles you already have. Suggests a merge; you decide.
+  // "rescued a stalled warehouse-management program"). One Claude check per role you
+  // already have, covering its new AND similar items; it sets the suggested choice.
+  const DUP_PROMPT = 'You compare career achievements from the same job. Two statements are the SAME if they describe the same accomplishment, engagement or result (same client work, same initiative, same metric), even if worded differently, shorter, or with more or less detail. Different clients, initiatives or results are NOT the same. Output a single JSON object and nothing else.';
+  async function askSame(existing, incoming) {
+    const list = 'EXISTING:\n' + existing.map((e) => `${e.id}: ${e.text}`).join('\n') + '\n\nNEW:\n' + incoming.map((t, i) => `${i}: ${t}`).join('\n')
+      + '\n\nFor each NEW item that is the same as an EXISTING one, give the pair. Format: {"same": [{"new": 0, "existing": "<id>"}]}';
+    const resp = await core().claude(core().models.quick, DUP_PROMPT, list, 8000);
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
+    return Array.isArray(d.same) ? d.same : [];
+  }
   async function markRewordedDuplicates(p) {
-    const pairs = [];
-    p.roles.forEach((r, ri) => {
+    await Promise.all(p.roles.map(async (r) => {
       if (r.status !== 'match') return;
       const existing = C().achievements.filter((a) => a.roleId === r.existingId);
-      r.achievements.forEach((a, ai) => { if (a.status === 'new' && existing.length) pairs.push({ ri, ai, text: a.data.text, existing }); });
-    });
-    if (!pairs.length) return p;
-    const list = pairs.map((x, i) => `NEW ${i}: ${x.text}\n` + x.existing.map((e) => `  EXISTING ${e.id}: ${e.text}`).join('\n')).join('\n\n');
-    try {
-      const resp = await core().claude(core().models.quick, 'You compare career achievements. Two statements are the SAME only if they describe the same accomplishment (same project or result), even if worded differently or with different detail. Output a single JSON object {"same": [{"new": <index>, "existing": "<id>"}]} and nothing else.', list, 1200);
-      const texts = (resp.content || []).filter((b) => b.type === 'text');
-      const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
-      (Array.isArray(d.same) ? d.same : []).forEach((m) => {
-        const x = pairs[+m.new];
-        const ex = x && x.existing.find((e) => e.id === m.existing);
-        if (!ex) return;
-        Object.assign(p.roles[x.ri].achievements[x.ai], { status: 'similar', existingId: ex.id, existingText: ex.text, mode: 'same', accept: true });
+      const items = r.achievements.filter((a) => a.status === 'new' || a.status === 'similar');
+      if (!existing.length || !items.length) return;
+      let pairs;
+      try { pairs = await askSame(existing, items.map((a) => a.data.text)); } catch (e) { return; } // best effort: you still choose
+      items.forEach((a) => { if (a.status === 'similar') a.mode = 'add'; });
+      pairs.forEach((m) => {
+        const a = items[+m.new], ex = existing.find((e) => e.id === m.existing);
+        if (a && ex) Object.assign(a, { status: 'similar', existingId: ex.id, existingText: ex.text, mode: 'same', accept: true });
       });
-    } catch (e) { /* best effort: items stay "new" and you can still untick them */ }
+    }));
     return p;
+  }
+
+  // Merge achievement `from` into `into`: keep every wording (resumes need
+  // different phrasings), and combine numbers, tags, sources and usage.
+  function mergeInto(into, from, sourceId) {
+    const t = now();
+    const variants = into.variants || [];
+    const add = (text, sid) => {
+      if (!text || norm(text) === norm(into.text) || variants.some((v) => norm(v.text) === norm(text))) return;
+      variants.push({ text, sourceId: sid || null, addedAt: t });
+    };
+    add(from.text, sourceId || (from.sources || [])[0]);
+    (from.variants || []).forEach((v) => add(v.text, v.sourceId));
+    into.variants = variants;
+    const metricKeys = new Set((into.metrics || []).map((m) => norm(m.value)));
+    into.metrics = [...(into.metrics || []), ...(from.metrics || []).filter((m) => !metricKeys.has(norm(m.value)))];
+    ['skills', 'themes', 'personas', 'usedIn'].forEach((k) => { into[k] = [...new Set([...(into[k] || []), ...(from[k] || [])])]; });
+    into.sources = [...new Set([...(into.sources || []), ...(from.sources || []), ...(sourceId ? [sourceId] : [])])];
+    into.confirmedAt = t;
+  }
+
+  // ── Profile-wide duplicate check (Needs review → Check for duplicates) ──
+  async function findDuplicates(onProgress) {
+    const c = C();
+    c.dupeSuggestions = [];
+    const dismissed = new Set(c.notDuplicates || []);
+    const roles = c.roles.filter((r) => c.achievements.filter((a) => a.roleId === r.id).length >= 2);
+    let done = 0;
+    for (const r of roles) {
+      const list = c.achievements.filter((a) => a.roleId === r.id);
+      if (onProgress) onProgress(++done, roles.length);
+      try {
+        const resp = await core().claude(core().models.quick, DUP_PROMPT,
+          'ACHIEVEMENTS:\n' + list.map((a) => `${a.id}: ${a.text}`).join('\n') + '\n\nGroup the ones that are the same accomplishment. Only groups of 2 or more. Format: {"groups": [["<id>", "<id>"]]}', 8000);
+        const texts = (resp.content || []).filter((b) => b.type === 'text');
+        const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
+        (Array.isArray(d.groups) ? d.groups : []).forEach((g) => {
+          const ids = (Array.isArray(g) ? g : []).filter((id) => list.some((a) => a.id === id));
+          const key = [...ids].sort().join('|');
+          if (ids.length >= 2 && !dismissed.has(key)) c.dupeSuggestions.push({ id: uid('dup'), roleId: r.id, ids, key, createdAt: now() });
+        });
+      } catch (e) { /* skip this role; try again later */ }
+    }
+    // Expertise: synonyms and variants of the same item, per type.
+    const byType = {};
+    (c.expertise || []).forEach((x) => (byType[x.type] = byType[x.type] || []).push(x));
+    for (const [type, list] of Object.entries(byType)) {
+      if (list.length < 2) continue;
+      try {
+        const resp = await core().claude(core().models.quick,
+          'You tidy a list of an executive\'s ' + type + ' entries. Group entries that mean the same thing: synonyms, abbreviations, spelling variants or typos, or one being a slightly longer name for the other (e.g. "GPT-4o" and "OpenAI GPT-4o"; "Signavio" and "SAP Signavio"). Do NOT group items that are genuinely different (e.g. "Retail" and "Consumer Goods" are different industries). Output a single JSON object and nothing else.',
+          'ENTRIES:\n' + list.map((x) => `${x.id}: ${x.name}`).join('\n') + '\n\nFormat: {"groups": [["<id>", "<id>"]]}', 6000);
+        const texts = (resp.content || []).filter((b) => b.type === 'text');
+        const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
+        (Array.isArray(d.groups) ? d.groups : []).forEach((g) => {
+          const ids = (Array.isArray(g) ? g : []).filter((id) => list.some((x) => x.id === id));
+          const key = [...ids].sort().join('|');
+          if (ids.length >= 2 && !dismissed.has(key)) c.dupeSuggestions.push({ id: uid('dup'), kind: 'expertise', type, ids, key, createdAt: now() });
+        });
+      } catch (e) { /* skip this type */ }
+    }
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+    return c.dupeSuggestions.length;
+  }
+  function mergeDuplicates(suggestionId, keepId) {
+    const c = C(), sg = (c.dupeSuggestions || []).find((x) => x.id === suggestionId);
+    if (!sg) return;
+    if (sg.kind === 'expertise') {
+      const keep = c.expertise.find((x) => x.id === keepId) || c.expertise.find((x) => x.id === sg.ids[0]);
+      sg.ids.filter((id) => id !== keep.id).forEach((id) => {
+        const o = c.expertise.find((x) => x.id === id);
+        if (!o) return;
+        keep.level = Math.max(keep.level || 0, o.level || 0) || null;
+        keep.sources = [...new Set([...(keep.sources || []), ...(o.sources || [])])];
+        keep.aliases = [...new Set([...(keep.aliases || []), o.name, ...(o.aliases || [])])];
+      });
+      keep.confirmedAt = now();
+      c.expertise = c.expertise.filter((x) => x.id === keep.id || !sg.ids.includes(x.id));
+      c.dupeSuggestions = c.dupeSuggestions.filter((x) => x.id !== suggestionId);
+      core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+      return;
+    }
+    const keep = c.achievements.find((a) => a.id === keepId) || c.achievements.find((a) => a.id === sg.ids[0]);
+    sg.ids.filter((id) => id !== keep.id).forEach((id) => {
+      const other = c.achievements.find((a) => a.id === id);
+      if (other) mergeInto(keep, other);
+    });
+    c.achievements = c.achievements.filter((a) => a.id === keep.id || !sg.ids.includes(a.id));
+    c.dupeSuggestions = c.dupeSuggestions.filter((x) => x.id !== suggestionId);
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+  }
+  function keepSeparate(suggestionId) {
+    const c = C(), sg = (c.dupeSuggestions || []).find((x) => x.id === suggestionId);
+    if (!sg) return;
+    c.notDuplicates = [...new Set([...(c.notDuplicates || []), sg.key])];
+    c.dupeSuggestions = c.dupeSuggestions.filter((x) => x.id !== suggestionId);
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+  }
+  function useVariant(achId, text) {
+    const a = C().achievements.find((x) => x.id === achId);
+    if (!a || !text) return;
+    const old = a.text;
+    a.variants = (a.variants || []).filter((v) => norm(v.text) !== norm(text));
+    a.variants.push({ text: old, sourceId: (a.sources || [])[0] || null, addedAt: now() });
+    a.text = text; a.updatedAt = now(); a.confirmedAt = now();
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
   }
 
   // ── Import entry point (read → upload original → extract → propose) ────
@@ -375,8 +556,9 @@ Output a SINGLE JSON object, no prose around it:
   function reviewItems() {
     const c = C(), cutoff = Date.now() - STALE_DAYS * 86400000, out = [];
     c.conflicts.forEach((cf) => out.push({ type: 'conflict', id: cf.id, cf }));
+    (c.dupeSuggestions || []).forEach((sg) => out.push({ type: 'duplicate', id: sg.id, sg }));
     c.achievements.forEach((a) => {
-      if (!(a.metrics || []).length) out.push({ type: 'no-metric', id: a.id, kind: 'achievements', item: a });
+      if (!(a.metrics || []).length && (a.kind || 'outcome') === 'outcome') out.push({ type: 'no-metric', id: a.id, kind: 'achievements', item: a });
       else if (new Date(a.confirmedAt).getTime() < cutoff) out.push({ type: 'stale', id: a.id, kind: 'achievements', item: a });
     });
     c.roles.forEach((r) => {
@@ -402,6 +584,7 @@ Output a SINGLE JSON object, no prose around it:
     importFile, buildProposal, proposalCounts, applyProposal,
     update, add, remove, confirm, setPerson, resolveConflict,
     reviewItems, isStale, graph, STALE_DAYS,
+    findDuplicates, mergeDuplicates, keepSeparate, useVariant,
     data: () => C(),
     _test: { similarity, findRole, matchAchievement },
   };

@@ -160,7 +160,7 @@
     doc.settings = Object.assign({ gmailLabel: 'LevelUp' }, doc.settings || {});
     if (!doc.companies || typeof doc.companies !== 'object' || Array.isArray(doc.companies)) doc.companies = {};
     if (!doc.career || typeof doc.career !== 'object') doc.career = {};
-    ['summaries', 'roles', 'achievements', 'education', 'boards', 'publications', 'credentials', 'sources', 'conflicts'].forEach((k) => {
+    ['summaries', 'roles', 'achievements', 'education', 'boards', 'publications', 'credentials', 'expertise', 'sources', 'conflicts'].forEach((k) => {
       if (!Array.isArray(doc.career[k])) doc.career[k] = [];
     });
     if (!doc.career.person || typeof doc.career.person !== 'object') doc.career.person = {};

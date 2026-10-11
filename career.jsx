@@ -3,7 +3,7 @@
 
 const CP_TABS = [
   { id: 'experience', label: 'Experience' },
-  { id: 'themes', label: 'Skills & themes' },
+  { id: 'themes', label: 'Expertise & themes' },
   { id: 'more', label: 'Education & boards' },
   { id: 'sources', label: 'Sources' },
   { id: 'review', label: 'Needs review' },
@@ -67,22 +67,36 @@ function AchievementRow({ a, sourceNames }) {
   const [edit, setEdit] = React.useState(false);
   const [draft, setDraft] = React.useState(null);
   const L = window.LU_CAREER;
-  const begin = () => { setDraft({ text: a.text, metrics: (a.metrics || []).map((m) => m.value).join(', '), themes: (a.themes || []).join(', '), skills: (a.skills || []).join(', '), personas: a.personas || [] }); setEdit(true); };
+  const begin = () => { setDraft({ kind: a.kind || 'outcome', text: a.text, metrics: (a.metrics || []).map((m) => m.value).join(', '), themes: (a.themes || []).join(', '), skills: (a.skills || []).join(', '), personas: a.personas || [] }); setEdit(true); };
   const split = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
   const save = () => {
-    L.update('achievements', a.id, { text: draft.text.trim(), metrics: split(draft.metrics).map((v) => ({ label: '', value: v })), themes: split(draft.themes).map((t) => t.toLowerCase()), skills: split(draft.skills), personas: draft.personas });
+    L.update('achievements', a.id, { kind: draft.kind, text: draft.text.trim(), metrics: split(draft.metrics).map((v) => ({ label: '', value: v })), themes: split(draft.themes).map((t) => t.toLowerCase()), skills: split(draft.skills), personas: draft.personas });
     setEdit(false);
   };
   if (edit) {
     return (
       <div style={{ padding: '12px 0', borderTop: '1px solid var(--line-1)' }}>
         <TextArea value={draft.text} onChange={(v) => setDraft({ ...draft, text: v })} rows={3}/>
+        {(a.variants || []).length > 0 && (
+          <div style={{ margin: '8px 0', padding: '8px 10px', border: '1px dashed var(--line-2)', borderRadius: 3 }}>
+            <div style={{ ...cpMono, marginBottom: 4 }}>Other wordings from your resumes</div>
+            {a.variants.map((v, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '4px 0', fontSize: 12.5, color: 'var(--ink-2)' }}>
+                <span style={{ flex: 1 }}>{v.text}</span>
+                <button style={cpLink} onClick={() => { L.useVariant(a.id, v.text); setEdit(false); }}>Use this wording</button>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '10px 0' }}>
           <Field label="Metrics (comma-separated)"><TextInput value={draft.metrics} onChange={(v) => setDraft({ ...draft, metrics: v })}/></Field>
           <Field label="Themes"><TextInput value={draft.themes} onChange={(v) => setDraft({ ...draft, themes: v })}/></Field>
           <Field label="Skills"><TextInput value={draft.skills} onChange={(v) => setDraft({ ...draft, skills: v })}/></Field>
         </div>
         <PersonaToggles value={draft.personas} onChange={(v) => setDraft({ ...draft, personas: v })}/>
+        <div style={{ marginTop: 10, maxWidth: 260 }}>
+          <Select value={draft.kind} onChange={(v) => setDraft({ ...draft, kind: v })} options={[{ value: 'outcome', label: 'Outcome (a result)' }, { value: 'inflight', label: 'In flight (in progress)' }, { value: 'responsibility', label: 'Responsibility (scope)' }]}/>
+        </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <Btn variant="primary" size="s" onClick={save} disabled={!draft.text.trim()}>Save</Btn>
           <Btn variant="ghost" size="s" onClick={() => setEdit(false)}>Cancel</Btn>
@@ -97,13 +111,16 @@ function AchievementRow({ a, sourceNames }) {
     <div style={{ padding: '10px 0', borderTop: '1px solid var(--line-1)', display: 'grid', gridTemplateColumns: '12px 1fr auto', gap: 10, alignItems: 'start' }}>
       <span style={{ paddingTop: 6 }}><FreshDot fact={a}/></span>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, color: 'var(--ink-1)', lineHeight: 1.5 }}>{a.text}</div>
+        <div style={{ fontSize: 13.5, color: (a.kind || 'outcome') === 'responsibility' ? 'var(--ink-2)' : 'var(--ink-1)', lineHeight: 1.5 }}>
+          {a.kind && a.kind !== 'outcome' && <span style={{ ...cpMono, marginRight: 8 }}>{a.kind === 'inflight' ? 'In flight' : 'Responsibility'}</span>}
+          {a.text}
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 5 }}>
           <Chips items={(a.metrics || []).map((m) => m.value)} mono/>
           <Chips items={a.themes}/>
           {personas.map((p) => <span key={p.id} className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>{p.code}</span>)}
           <span style={{ fontSize: 11, color: 'var(--ink-4)' }} title={sourceNames(a.sources).join('\n')}>
-            {(a.sources || []).length} source{(a.sources || []).length === 1 ? '' : 's'}{(a.usedIn || []).length ? ` · used ${(a.usedIn || []).length}×` : ''}
+            {(a.sources || []).length} source{(a.sources || []).length === 1 ? '' : 's'}{(a.variants || []).length ? ` · ${a.variants.length + 1} wordings` : ''}{(a.usedIn || []).length ? ` · used ${(a.usedIn || []).length}×` : ''}
           </span>
         </div>
       </div>
@@ -206,7 +223,7 @@ function ImportReview({ proposal, onApply, onCancel }) {
   );
   return (
     <div style={{ ...cpBox, padding: '18px 20px', marginBottom: 18 }}>
-      <div className="eyebrow" style={{ marginBottom: 4 }}>Review changes · {p.source.name}</div>
+      <div className="eyebrow" style={{ marginBottom: 4 }}>Review changes{p.position ? ` · file ${p.position}` : ''} · {p.source.name}</div>
       <div className="serif" style={{ fontSize: 20, color: 'var(--ink-1)', marginBottom: 4 }}>
         {counts.new} new · {counts.known} already known · {counts.updates} additions · {counts.conflicts} conflicts
       </div>
@@ -251,7 +268,7 @@ function ImportReview({ proposal, onApply, onCancel }) {
       ))}
       {Object.entries(p.lists).map(([kind, items]) => items.length > 0 && (
         <div key={kind} style={{ borderTop: '1px solid var(--line-1)', padding: '10px 0' }}>
-          <div style={cpMono}>{{ education: 'Education', boards: 'Boards', publications: 'Publications & talks', credentials: 'Certifications & awards' }[kind]}</div>
+          <div style={cpMono}>{{ education: 'Education', boards: 'Boards', publications: 'Publications & talks', credentials: 'Certifications & awards', expertise: 'Expertise' }[kind]}</div>
           {items.map((x, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, padding: '5px 0', fontSize: 13, opacity: x.status === 'known' ? 0.6 : 1 }}>
               {x.status === 'known' ? <span style={{ width: 13 }}/> : <Check obj={x}/>}
@@ -268,6 +285,62 @@ function ImportReview({ proposal, onApply, onCancel }) {
   );
 }
 
+// ── A suggested duplicate: pick the wording to lead with, then merge ─────
+function DuplicateItem({ sg, items, role }) {
+  const L = window.LU_CAREER;
+  const longest = [...items].sort((a, b) => (b.metrics || []).length - (a.metrics || []).length || b.text.length - a.text.length)[0];
+  const [keep, setKeep] = React.useState(longest && longest.id);
+  return (
+    <div style={{ padding: '12px 0', borderTop: '1px solid var(--line-1)' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+        <span style={{ ...cpMono, width: 150, color: 'var(--ink-3)' }}>Possible duplicate</span>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{role.title} · {role.company} · choose the wording to lead with</span>
+      </div>
+      <div style={{ paddingLeft: 162, marginTop: 6 }}>
+        {items.map((a) => (
+          <label key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0', fontSize: 13.5, color: 'var(--ink-1)', cursor: 'pointer' }}>
+            <input type="radio" name={sg.id} checked={keep === a.id} onChange={() => setKeep(a.id)} style={{ marginTop: 4 }}/>
+            <span>{a.text}</span>
+          </label>
+        ))}
+        <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+          <button style={cpLink} onClick={() => L.mergeDuplicates(sg.id, keep)}>{sg.kind === 'expertise' ? 'Combine under this name' : 'Merge (keep the others as alternative wordings)'}</button>
+          <button style={cpLink} onClick={() => L.keepSeparate(sg.id)}>Keep separate</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Expertise (capabilities, industries, processes, platforms, offerings) ──
+const EXPERTISE_LABELS = { capability: 'Capabilities', industry: 'Industries', process: 'Business processes', platform: 'Platforms & technology', offering: 'Market offerings', language: 'Languages' };
+function Level({ n }) {
+  if (!n) return null;
+  return <span title={n + ' of 5'} style={{ letterSpacing: 1, fontSize: 9, color: 'var(--ink-2)', marginLeft: 6 }}>{'●'.repeat(n)}<span style={{ color: 'var(--ink-4)' }}>{'○'.repeat(5 - n)}</span></span>;
+}
+function ExpertisePanel({ items }) {
+  const L = window.LU_CAREER;
+  const types = Object.keys(EXPERTISE_LABELS).filter((t) => items.some((x) => x.type === t));
+  if (!types.length) return null;
+  return (
+    <div style={{ marginBottom: 18 }}>
+      {types.map((t) => (
+        <div key={t} style={{ marginBottom: 14 }}>
+          <div style={{ ...cpMono, marginBottom: 8 }}>{EXPERTISE_LABELS[t]}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {items.filter((x) => x.type === t).sort((a, b) => (b.level || 0) - (a.level || 0)).map((x) => (
+              <span key={x.id} title={(x.category ? x.category + ' · ' : '') + (x.sources || []).length + ' source(s)'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 14, fontSize: 12.5, border: '1px solid var(--line-2)', color: 'var(--ink-1)' }}>
+                {x.name}<Level n={x.level}/>
+                <button onClick={() => { if (window.confirm('Remove "' + x.name + '"?')) L.remove('expertise', x.id); }} title="Remove" style={{ appearance: 'none', border: 'none', background: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 12, padding: '0 0 0 4px' }}>×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────
 function CareerView() {
   useCareerTick();
@@ -278,29 +351,44 @@ function CareerView() {
   const [error, setError] = React.useState(null);
   const [proposal, setProposal] = React.useState(null);
   const [filter, setFilter] = React.useState(null);
+  const [dupBusy, setDupBusy] = React.useState(null);
   const fileRef = React.useRef(null);
   if (!L) return <div style={{ padding: 40, color: 'var(--ink-2)' }}>The career profile didn't load. Refresh the page (Cmd+Shift+R).</div>;
   const c = L.data();
   const sourceNames = (ids) => (ids || []).map((id) => id === 'manual' ? 'Added by you' : ((c.sources.find((s) => s.id === id) || {}).name || 'Unknown source'));
   const review = L.reviewItems();
   const roles = [...c.roles].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
-  const achFor = (rid) => c.achievements.filter((a) => a.roleId === rid);
-  const withMetrics = c.achievements.filter((a) => (a.metrics || []).length).length;
+  const KIND_ORDER = { outcome: 0, inflight: 1, responsibility: 2 };
+  const achFor = (rid) => c.achievements.filter((a) => a.roleId === rid).sort((x, y) => (KIND_ORDER[x.kind || 'outcome'] - KIND_ORDER[y.kind || 'outcome']));
+  const outcomes = c.achievements.filter((a) => (a.kind || 'outcome') === 'outcome');
+  const withMetrics = outcomes.filter((a) => (a.metrics || []).length).length;
 
-  const onFile = async (e) => {
-    const f = e.target.files && e.target.files[0];
+  // Several files can be chosen at once: each is read, then reviewed, in turn.
+  const queueRef = React.useRef({ files: [], total: 0, kind: 'resume' });
+  const readNext = async () => {
+    const q = queueRef.current;
+    const f = q.files.shift();
+    if (!f) { q.total = 0; return; }
+    const n = q.total - q.files.length;
+    setError(null); setBusy(`${q.total > 1 ? `File ${n} of ${q.total}: ` : ''}Claude is reading ${f.name}… usually under a minute.`);
+    try { const p = await L.importFile(f, q.kind); p.position = q.total > 1 ? `${n} of ${q.total}` : null; setProposal(p); }
+    catch (err) { setError(`${f.name}: ${err.message}`); setBusy(null); readNext(); return; }
+    setBusy(null);
+  };
+  const onFile = (e) => {
+    const files = [...(e.target.files || [])];
     e.target.value = '';
-    if (!f) return;
-    setError(null); setBusy(`Claude is reading ${f.name}… this usually takes about a minute.`);
-    try { setProposal(await L.importFile(f, kind)); }
-    catch (err) { setError(err.message); }
-    finally { setBusy(null); }
+    if (!files.length) return;
+    queueRef.current = { files, total: files.length, kind };
+    readNext();
   };
   const apply = (p) => {
     const r = L.applyProposal(p);
     setProposal(null);
     window.LU_CORE.pill(`Profile updated: ${r.added} added · ${r.confirmed} confirmed · ${r.updated} updated`);
+    readNext();
   };
+  const discard = () => { setProposal(null); readNext(); };
 
   const person = c.person || {};
   return (
@@ -313,7 +401,7 @@ function CareerView() {
             <div className="serif-italic" style={{ fontSize: 15, color: 'var(--ink-3)', marginTop: 4 }}>{person.headline || 'Import a resume or your LinkedIn profile to start.'}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-            {[['Roles', c.roles.length], ['Achievements', c.achievements.length], ['With numbers', c.achievements.length ? Math.round(100 * withMetrics / c.achievements.length) + '%' : '—'], ['Sources', c.sources.length]].map(([k, v]) => (
+            {[['Roles', c.roles.length], ['Achievements', c.achievements.length], ['Outcomes with numbers', outcomes.length ? Math.round(100 * withMetrics / outcomes.length) + '%' : '—'], ['Sources', c.sources.length]].map(([k, v]) => (
               <div key={k} style={{ textAlign: 'right' }}><div className="eyebrow" style={{ marginBottom: 2 }}>{k}</div><div className="serif" style={{ fontSize: 24, color: 'var(--ink-1)', lineHeight: 1 }}>{v}</div></div>
             ))}
           </div>
@@ -336,13 +424,13 @@ function CareerView() {
             <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '5px 6px' }}>
               <option value="resume">Resume</option><option value="linkedin">LinkedIn profile (PDF)</option><option value="bio">Bio or other document</option>
             </select>
-            <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" style={{ display: 'none' }} onChange={onFile}/>
-            <Btn variant="outline" icon="plus" disabled={!!busy || !!proposal} onClick={() => fileRef.current && fileRef.current.click()}>Choose file (PDF or Word)</Btn>
+            <input ref={fileRef} type="file" multiple accept=".pdf,.docx,.txt,.md" style={{ display: 'none' }} onChange={onFile}/>
+            <Btn variant="outline" icon="plus" disabled={!!busy || !!proposal} onClick={() => fileRef.current && fileRef.current.click()}>Choose files (PDF or Word)</Btn>
             {busy && <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{busy}</span>}
             {error && <span style={{ fontSize: 12.5, color: 'var(--signal)' }}>{error}</span>}
           </div>
 
-          {proposal && <ImportReview proposal={proposal} onApply={apply} onCancel={() => setProposal(null)}/>}
+          {proposal && <ImportReview key={proposal.source.name + (proposal.position || '')} proposal={proposal} onApply={apply} onCancel={discard}/>}
 
           {tab === 'experience' && (
             roles.length === 0 ? (
@@ -364,7 +452,8 @@ function CareerView() {
               <div>
                 <div style={{ ...cpMono, marginBottom: 8 }}>Themes (how often your achievements show them)</div>
                 <div style={{ marginBottom: 18 }}>{g.themes.length ? g.themes.map((t) => chip(t, 'theme')) : <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>None yet.</span>}</div>
-                <div style={{ ...cpMono, marginBottom: 8 }}>Skills</div>
+                <ExpertisePanel items={c.expertise || []}/>
+                <div style={{ ...cpMono, marginBottom: 8 }}>Skills shown in achievements</div>
                 <div style={{ marginBottom: 18 }}>{g.skills.length ? g.skills.map((s) => chip(s, 'skill')) : <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>None yet.</span>}</div>
                 {filter && (
                   <div style={{ ...cpBox, padding: '14px 16px' }}>
@@ -383,7 +472,7 @@ function CareerView() {
             );
           })()}
 
-          {tab === 'more' && [['education', 'Education', (x) => [x.degree, x.field, x.school, x.year].filter(Boolean).join(' · ')],
+          {tab === 'more' && [['education', 'Education', (x) => [x.degree, x.field, x.school, x.year, x.honors].filter(Boolean).join(' · ')],
             ['boards', 'Boards & advisory', (x) => [x.role, x.org, [fmtDate(x.start), fmtDate(x.end)].filter(Boolean).join(' – ')].filter(Boolean).join(' · ')],
             ['publications', 'Publications & talks', (x) => [x.title, x.venue, x.year].filter(Boolean).join(' · ')],
             ['credentials', 'Certifications & awards', (x) => [x.name, x.issuer, x.year].filter(Boolean).join(' · ')]].map(([k, label, line]) => (
@@ -412,16 +501,39 @@ function CareerView() {
           )}
 
           {tab === 'review' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <Btn variant="outline" icon="spark" disabled={!!dupBusy || !c.achievements.length} onClick={async () => {
+                setDupBusy('Starting…');
+                try { const n = await L.findDuplicates((i, total) => setDupBusy(`Checking role ${i} of ${total}…`)); window.LU_CORE.pill(n ? `${n} possible duplicate${n === 1 ? '' : 's'} to review` : 'No duplicates found'); }
+                finally { setDupBusy(null); }
+              }}>Check for duplicates</Btn>
+              <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{dupBusy || 'Finds achievements written more than once across your resumes.'}</span>
+            </div>
+          )}
+          {tab === 'review' && (
             review.length === 0 ? <div style={{ ...cpBox, padding: 24, fontSize: 14, color: 'var(--ink-3)' }}>All clear: nothing needs your attention.</div> : (
               <div style={{ ...cpBox, padding: '6px 16px' }}>
                 {review.map((x) => {
                   const role = x.kind === 'roles' ? x.item : x.item && c.roles.find((r) => r.id === x.item.roleId);
+                  if (x.type === 'duplicate' && x.sg.kind === 'expertise') {
+                    const items = x.sg.ids.map((id) => c.expertise.find((e) => e.id === id)).filter(Boolean).map((e) => ({ id: e.id, text: e.name + (e.level ? ' (' + e.level + '/5)' : ''), metrics: [] }));
+                    return <DuplicateItem key={x.id} sg={x.sg} items={items} role={{ title: EXPERTISE_LABELS[x.sg.type] || 'Expertise', company: 'same item, different names' }}/>;
+                  }
+                  if (x.type === 'duplicate') {
+                    const items = x.sg.ids.map((id) => c.achievements.find((a) => a.id === id)).filter(Boolean);
+                    const r = c.roles.find((rr) => rr.id === x.sg.roleId) || {};
+                    return <DuplicateItem key={x.id} sg={x.sg} items={items} role={r}/>;
+                  }
                   const what = { conflict: 'Conflicting values', 'no-metric': 'No number yet: add one if you can', 'no-scope': 'Add the scope (P&L, budget or team)', stale: 'Not confirmed in 12 months' }[x.type];
                   return (
                     <div key={x.type + x.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid var(--line-1)' }}>
                       <span style={{ ...cpMono, width: 150, color: x.type === 'conflict' ? 'var(--signal)' : 'var(--ink-3)', paddingTop: 2 }}>{what}</span>
                       <div style={{ flex: 1, fontSize: 13.5, color: 'var(--ink-1)' }}>
-                        {x.type === 'conflict' ? <>{x.cf.label}: yours <b style={{ fontWeight: 500 }}>{String(x.cf.current)}</b> vs <b style={{ fontWeight: 500 }}>{String(x.cf.proposed)}</b></>
+                        {x.type === 'conflict' ? <>{x.cf.label}: yours <b style={{ fontWeight: 500 }}>{String(x.cf.current)}</b> vs <b style={{ fontWeight: 500 }}>{String(x.cf.proposed)}</b>
+                          <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>
+                            {x.cf.entity === 'person' ? 'Contact & headline' : (() => { const rr = c.roles.find((q) => q.id === x.cf.entityId); return rr ? rr.title + ' · ' + rr.company : 'Role'; })()}
+                            {' · from '}{(c.sources.find((q) => q.id === x.cf.sourceId) || {}).name || 'a source'}
+                          </div></>
                           : x.kind === 'roles' ? <>{x.item.title} · {x.item.company}</> : x.item.text}
                         {x.kind === 'achievements' && role && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{role.title} · {role.company}</div>}
                       </div>
