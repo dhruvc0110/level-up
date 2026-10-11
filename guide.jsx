@@ -127,7 +127,17 @@ const GUIDE_CHAPTERS = [
         <><B>Source, Key contact, Next action</B> (with due date) and <B>Notes</B>: all editable.</>,
         <><B>Archive</B> (top right) removes it from the pipeline.</>,
       ]}/>
-      <GTip><B>Outreach drafts</B> (right side) currently produce <B>sample text</B> to show the layout. Real Claude-written drafts are planned.</GTip>
+      <GH>Outreach notes</GH>
+      <GP>The right side of the panel drafts notes for this role. Claude writes from the job, the company profile, the person, your persona's angle and the Career profile proof linked to that persona. It never invents anything and never sends: you copy the note and send it yourself.</GP>
+      <GShot src="outreach.jpg" caption="Outreach: a hiring-manager note with what to check before sending and the proof it is based on." width={760}/>
+      <GSteps items={[
+        <>In the bar at the bottom, pick <B>who it's for</B> (the key contact, the hiring manager, people you can reach out to, or your own contacts there). Level Up suggests the kind of note.</>,
+        <>Pick the <B>kind of note</B>: <B>Recruiter reply</B>, <B>Hiring-manager note</B>, <B>Warm-intro request</B> (with a <B>forwardable blurb</B> your contact can paste), <B>Follow-up</B>, or <B>LinkedIn connection note</B> (kept under 300 characters, with a live count).</>,
+        <>Click <B>Draft</B> (about 1–2¢). To change it, type an instruction such as "shorter" or "lead with the M&A work" and click <B>Revise</B>, or click <B>Edit</B> to change the words yourself.</>,
+        <>Read <B>Check before sending</B>: anything Claude couldn't confirm from your profile, or figures you may not want to share. <B>Based on</B> lists the achievements the note uses.</>,
+        <>Copy it, send it from your own email or LinkedIn, then click <B>Mark as sent</B>. That sets the next action to "Follow up with …" due in 7 days, and records the achievements you used (for tailoring resumes later). Next time, Level Up suggests a <B>Follow-up</B> that adds something new.</>,
+      ]}/>
+      <GTip>Notes follow one house style: professional and precise but not curt, warm but not flowery, articulate and to the point. Your persona adds the angle and any words to use or avoid (set in <i>Personas</i>).</GTip>
     </>,
   },
   {
@@ -399,6 +409,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Outreach notes are real now: in any opportunity, pick the person and the kind of note (recruiter reply, hiring-manager note, warm-intro request with a forwardable blurb, follow-up, LinkedIn note) and Claude drafts it from your Career profile. Mark as sent sets a 7-day follow-up.',
           'Fixes: linking an achievement to a persona on the map no longer counts as confirming it, and the persona lens now notices when expertise or proof has been re-linked.',
           'Career map: a new Map tab shows your roles flowing into themes of proof and on to your personas. Pick a persona to see its share light up, and get a strength score, gaps to close and your best proof. First time: click Link expertise.',
           'Personas drive everything: new or edited personas are used straight away for Gmail, LinkedIn and resume reading, and Claude links your Career profile proof to them automatically. Personas can be retired and brought back.',

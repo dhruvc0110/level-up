@@ -636,7 +636,7 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
       + '\nCERTIFICATIONS AND AWARDS:\n' + list('credentials', (x) => `- ${x.name}`)
       + '\nPUBLICATIONS AND TALKS:\n' + list('publications', (x) => `- ${x.title}`);
     const model = core().modelFor ? core().modelFor('lens') : core().models.parse;
-    const resp = await core().claude(model, LENS_PROMPT, user, 8000, null, 'lens');
+    const resp = await core().claude(model, LENS_PROMPT + (core().houseStyle ? '\n\nFor verdict, why and fix: ' + core().houseStyle : ''), user, 8000, null, 'lens');
     const texts = (resp.content || []).filter((b) => b.type === 'text');
     let d;
     try { d = core().extractJson(texts.length ? texts[texts.length - 1].text : ''); }
@@ -702,6 +702,15 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
     core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
     return item;
   }
+  // A document or note used these achievements (feeds resume tailoring later).
+  function markUsed(ids, use) {
+    const c = C();
+    (ids || []).forEach((id) => {
+      const a = c.achievements.find((x) => x.id === id);
+      if (a) a.usedIn = [...(a.usedIn || []).filter((u) => !(u.ref === use.ref)), use];
+    });
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+  }
   function add(kind, data) {
     const item = Object.assign({ id: uid(kind.slice(0, 3)), sources: ['manual'], confirmedAt: now(), updatedAt: now() }, kind === 'achievements' ? { metrics: [], skills: [], themes: [], personas: [], usedIn: [] } : {}, data);
     listOf(kind).push(item);
@@ -759,7 +768,7 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
 
   window.LU_CAREER = {
     importFile, buildProposal, proposalCounts, applyProposal,
-    update, add, remove, confirm, setPerson, resolveConflict, setPersonaTags,
+    update, add, remove, confirm, setPerson, resolveConflict, setPersonaTags, markUsed,
     reviewItems, isStale, graph, STALE_DAYS,
     findDuplicates, mergeDuplicates, keepSeparate, useVariant,
     relinkPersona, linkStatus, linkExpertise, assessPersona, lensFor,

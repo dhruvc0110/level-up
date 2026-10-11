@@ -4,7 +4,14 @@
 function DetailPanel({ opp, onClose, onUpdate, onDelete }) {
   const [generating, setGenerating] = React.useState(false);
   const [instruction, setInstruction] = React.useState('');
-  const [channel, setChannel] = React.useState('Email');
+  const [error, setError] = React.useState(null);
+  const O = window.LU_OUTREACH;
+  const people = O ? O.recipients(opp) : [];
+  const hasSent = (opp.drafts || []).some((d) => d.sentAt);
+  const [toKey, setToKey] = React.useState(() => (people[0] ? people[0].key : ''));
+  const to = people.find((p) => p.key === toKey) || null;
+  const [type, setType] = React.useState(() => (O ? O.suggestType(opp, people[0] || null, hasSent) : 'hiring'));
+  const pickTo = (key) => { setToKey(key); const r = people.find((p) => p.key === key) || null; if (O) setType(O.suggestType(opp, r, hasSent)); };
 
   // Lock body scroll while open
   React.useEffect(() => {
@@ -19,33 +26,19 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const generate = () => {
-    setGenerating(true);
-    setTimeout(() => {
-      const persona = window.LU_PERSONAS.find(p => p.id === opp.persona);
-      const draft = composeDraft(opp, persona, channel, instruction);
-      const newDraft = {
-        id: 'dr-' + Math.random().toString(36).slice(2, 8),
-        timestamp: 'Just now',
-        channel,
-        instruction: instruction || null,
-        body: draft,
-      };
-      onUpdate({ ...opp, drafts: [newDraft, ...(opp.drafts || []).map(d => d.body === '...' ? { ...d, body: composeDraft(opp, persona, d.channel, null) } : d)] });
-      setGenerating(false);
+  // With an instruction, Claude revises the latest draft of this type; without, it writes a fresh one.
+  const generate = async () => {
+    if (!O) { setError('Refresh the page (Cmd+Shift+R) to load outreach.'); return; }
+    setGenerating(true); setError(null);
+    const base = instruction.trim() ? (opp.drafts || []).find((d) => d.type === type && d.body) : null;
+    try {
+      const d = await O.draft(opp, { type, to, instruction: instruction.trim() || null, base });
+      onUpdate({ ...opp, drafts: [d, ...(opp.drafts || [])] });
       setInstruction('');
-    }, 3200);
+    } catch (e) {
+      setError(String(e.message || e).slice(0, 200));
+    } finally { setGenerating(false); }
   };
-
-  // Ensure any seed-data placeholder drafts have real content for the demo
-  React.useEffect(() => {
-    if (!opp.drafts?.length) return;
-    if (opp.drafts.every(d => d.body !== '...')) return;
-    const persona = window.LU_PERSONAS.find(p => p.id === opp.persona);
-    const filled = opp.drafts.map(d => d.body === '...' ? { ...d, body: composeDraft(opp, persona, d.channel, null) } : d);
-    onUpdate({ ...opp, drafts: filled });
-    // eslint-disable-next-line
-  }, []);
 
   return (
     <>
@@ -76,15 +69,15 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete }) {
           minHeight: 0,
         }}>
           <DetailContext opp={opp} onUpdate={onUpdate}/>
-          <DetailDrafts opp={opp} onUpdate={onUpdate} generating={generating}/>
+          <DetailDrafts opp={opp} onUpdate={onUpdate} generating={generating} error={error}/>
         </div>
 
         {/* Bottom instruction bar */}
         <DetailInstructionBar
           instruction={instruction} setInstruction={setInstruction}
-          channel={channel} setChannel={setChannel}
+          type={type} setType={setType} people={people} toKey={toKey} setToKey={pickTo}
           onGenerate={generate} generating={generating}
-          hasDrafts={(opp.drafts?.length || 0) > 0}
+          hasDrafts={(opp.drafts || []).some((d) => d.type === type)}
         />
       </div>
 
@@ -326,8 +319,25 @@ function ActivityLine({ when, what, last }) {
 }
 
 // ── RIGHT: Drafts column ─────────────────────────────────────────────────
-function DetailDrafts({ opp, onUpdate, generating }) {
-  const drafts = opp.drafts || [];
+function DetailDrafts({ opp, onUpdate, generating, error }) {
+  const drafts = (opp.drafts || []).filter((d) => d.body && d.body !== '...');
+  const save = (next) => onUpdate({ ...opp, drafts: (opp.drafts || []).map((x) => (x.id === next.id ? next : x)) });
+  const markSent = (d) => {
+    const now = new Date();
+    const due = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+    const sentAt = now.toISOString();
+    const who = d.to && d.to.name;
+    onUpdate({
+      ...opp,
+      drafts: (opp.drafts || []).map((x) => (x.id === d.id ? { ...x, sentAt } : x)),
+      nextAction: who ? `Follow up with ${who}` : 'Follow up on outreach',
+      dueDate: due,
+    });
+    if (window.LU_CAREER && window.LU_CAREER.markUsed && (d.used || []).length) {
+      window.LU_CAREER.markUsed(d.used, { ref: opp.id + ':' + d.id, kind: 'outreach', oppId: opp.id, company: opp.company, role: opp.role, at: sentAt });
+    }
+    window.LU_CORE && window.LU_CORE.pill(`Marked as sent · follow-up due ${new Date(due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`);
+  };
 
   return (
     <div style={{
@@ -346,14 +356,15 @@ function DetailDrafts({ opp, onUpdate, generating }) {
         </span>
       </div>
 
+      {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 12 }}>Couldn’t draft: {error}</div>}
       {generating && <ThinkingLattice/>}
 
       {!generating && drafts.length === 0 && <DraftsEmpty opp={opp}/>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {drafts.map((d, i) => (
-          <DraftCard key={d.id} draft={d} index={i} onDelete={() => {
-            onUpdate({ ...opp, drafts: drafts.filter(x => x.id !== d.id) });
+          <DraftCard key={d.id} draft={d} index={i} onSave={save} onSent={() => markSent(d)} onDelete={() => {
+            onUpdate({ ...opp, drafts: (opp.drafts || []).filter(x => x.id !== d.id) });
           }}/>
         ))}
       </div>
@@ -361,12 +372,30 @@ function DetailDrafts({ opp, onUpdate, generating }) {
   );
 }
 
-function DraftCard({ draft, index, onDelete }) {
-  const [copied, setCopied] = React.useState(false);
-  const copy = () => {
-    navigator.clipboard?.writeText(draft.body);
-    setCopied(true); setTimeout(() => setCopied(false), 1400);
+function draftWhen(d) {
+  if (!d.createdAt) return d.timestamp || '';
+  const t = new Date(d.createdAt), mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return mins + 'm ago';
+  if (mins < 1440) return Math.round(mins / 60) + 'h ago';
+  return t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function DraftCard({ draft, index, onDelete, onSave, onSent }) {
+  const [copied, setCopied] = React.useState(null);
+  const [editing, setEditing] = React.useState(false);
+  const [text, setText] = React.useState('');
+  const [subj, setSubj] = React.useState('');
+  const copy = (what, value) => {
+    navigator.clipboard?.writeText(value);
+    setCopied(what); setTimeout(() => setCopied(null), 1400);
   };
+  const T = window.LU_OUTREACH && window.LU_OUTREACH.TYPES[draft.type];
+  const limit = T && T.limit;
+  const career = (window.LU_CORE && window.LU_CORE.doc().career) || {};
+  const used = (draft.used || []).map((id) => (career.achievements || []).find((a) => a.id === id)).filter(Boolean);
+  const iconBtn = { width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', borderRadius: 3, color: 'var(--ink-3)', cursor: 'pointer' };
+  const small = { appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--ink-2)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3 };
   return (
     <div style={{
       border: '1px solid var(--line-1)', borderRadius: 3,
@@ -379,64 +408,77 @@ function DraftCard({ draft, index, onDelete }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 8,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="mono" style={{
-            fontSize: 10, color: 'var(--ink-4)', letterSpacing: '0.08em',
-          }}>
-            DRAFT · {String(index + 1).padStart(2, '0')}
-          </span>
-          <span style={{ width: 1, height: 10, background: 'var(--line-2)' }}/>
-          <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>
-            {draft.channel}
-          </span>
-          <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.04em' }}>
-            · {draft.timestamp}
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+          <span style={{ fontSize: 11.5, color: 'var(--ink-2)', fontWeight: 500 }}>{draft.channel}</span>
+          {draft.to && <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>to {draft.to.name}</span>}
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)', letterSpacing: '0.04em' }}>· {draftWhen(draft)}</span>
+          {draft.sentAt && <span className="mono" style={{ fontSize: 10, color: 'oklch(62% 0.12 150)', letterSpacing: '0.06em' }}>SENT {new Date(draft.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toUpperCase()}</span>}
         </div>
         <div style={{ display: 'flex', gap: 2 }}>
-          <button onClick={copy} title="Copy"
-            style={{
-              width: 24, height: 24, display: 'inline-flex',
-              alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none', borderRadius: 3,
-              color: copied ? 'var(--ink-1)' : 'var(--ink-3)', transition: 'color .15s',
-            }}>
-            <Icon name={copied ? 'check' : 'copy'} size={13} stroke={1.6}/>
+          <button onClick={() => copy('all', (draft.subject ? 'Subject: ' + draft.subject + '\n\n' : '') + draft.body)} title="Copy note" style={{ ...iconBtn, color: copied === 'all' ? 'var(--ink-1)' : 'var(--ink-3)' }}>
+            <Icon name={copied === 'all' ? 'check' : 'copy'} size={13} stroke={1.6}/>
           </button>
-          <button onClick={onDelete} title="Delete"
-            style={{
-              width: 24, height: 24, display: 'inline-flex',
-              alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none', borderRadius: 3,
-              color: 'var(--ink-3)', transition: 'color .15s',
-            }}
+          <button onClick={onDelete} title="Delete" style={iconBtn}
             onMouseEnter={(e) => e.currentTarget.style.color = 'var(--ink-1)'}
             onMouseLeave={(e) => e.currentTarget.style.color = 'var(--ink-3)'}>
             <Icon name="close" size={13} stroke={1.6}/>
           </button>
         </div>
       </div>
-      <div style={{
-        padding: '14px 16px',
-        fontFamily: 'var(--serif)',
-        fontSize: 14, lineHeight: 1.65,
-        color: 'var(--ink-1)',
-        whiteSpace: 'pre-wrap',
-        letterSpacing: '-0.003em',
-      }}>
-        {draft.body}
-      </div>
-      {draft.instruction && (
+      {editing ? (
+        <div style={{ padding: '12px 14px' }}>
+          {draft.subject != null && <div style={{ marginBottom: 8 }}><TextInput value={subj} onChange={setSubj}/></div>}
+          <TextArea value={text} onChange={setText} rows={10}/>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <Btn variant="primary" size="s" onClick={() => { onSave({ ...draft, body: text, subject: draft.subject != null ? subj : null, edited: true }); setEditing(false); }}>Save</Btn>
+            <Btn variant="ghost" size="s" onClick={() => setEditing(false)}>Cancel</Btn>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding: '14px 16px' }}>
+          {draft.subject && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>Subject: <span style={{ color: 'var(--ink-1)' }}>{draft.subject}</span></div>}
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 14, lineHeight: 1.65, color: 'var(--ink-1)', whiteSpace: 'pre-wrap', letterSpacing: '-0.003em' }}>{draft.body}</div>
+          {limit && <div className="mono" style={{ fontSize: 10.5, marginTop: 6, color: draft.body.length > limit ? 'var(--signal)' : 'var(--ink-4)' }}>{draft.body.length} / {limit} characters</div>}
+        </div>
+      )}
+      {draft.blurb && !editing && (
+        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line-1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span className="eyebrow">Forwardable blurb</span>
+            <button style={small} onClick={() => copy('blurb', draft.blurb)}>{copied === 'blurb' ? 'Copied' : 'Copy blurb'}</button>
+          </div>
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink-2)', whiteSpace: 'pre-wrap', marginTop: 4 }}>{draft.blurb}</div>
+        </div>
+      )}
+      {(draft.check || []).length > 0 && !editing && (
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--line-1)', fontSize: 12, color: 'var(--ink-2)' }}>
+          <span className="eyebrow" style={{ marginRight: 6 }}>Check before sending</span>
+          {draft.check.map((c, i) => <div key={i} style={{ padding: '2px 0' }}><span style={{ color: 'oklch(70% 0.12 75)', marginRight: 6 }}>▲</span>{c}</div>)}
+        </div>
+      )}
+      {used.length > 0 && !editing && (
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--line-1)', fontSize: 12, color: 'var(--ink-3)' }}>
+          <span className="eyebrow" style={{ marginRight: 6 }}>Based on</span>
+          {used.map((a) => <div key={a.id} title={a.text} style={{ padding: '2px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>· {a.text}</div>)}
+        </div>
+      )}
+      {draft.instruction && !editing && (
         <div style={{
           padding: '8px 16px', borderTop: '1px solid var(--line-1)',
           fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)',
           background: 'var(--bg-1)',
           display: 'flex', gap: 8, alignItems: 'center',
         }}>
-          <span style={{ color: 'var(--ink-4)', letterSpacing: '0.06em' }}>INSTRUCTION ·</span>
+          <span style={{ color: 'var(--ink-4)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>INSTRUCTION ·</span>
           <span style={{ fontFamily: 'var(--sans)', fontStyle: 'italic', color: 'var(--ink-2)' }}>
             "{draft.instruction}"
           </span>
+        </div>
+      )}
+      {!editing && (
+        <div style={{ padding: '8px 16px', borderTop: '1px solid var(--line-1)', display: 'flex', gap: 16, alignItems: 'center' }}>
+          <button style={small} onClick={() => { setText(draft.body); setSubj(draft.subject || ''); setEditing(true); }}>Edit</button>
+          {!draft.sentAt && onSent && <button style={small} onClick={onSent} title="Records the date, sets a follow-up in 7 days and notes which achievements you used">Mark as sent</button>}
         </div>
       )}
     </div>
@@ -456,8 +498,7 @@ function DraftsEmpty({ opp }) {
         No drafts yet.
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.6, maxWidth: 360 }}>
-        Use the instruction bar below to draft a first outreach message.
-        Your <span style={{ color: 'var(--ink-2)' }}>{window.LU_PERSONAS.find(p => p.id === opp.persona)?.name}</span> persona will set the tone.
+        Pick who it's for and the kind of note below, then <b style={{ fontWeight: 500, color: 'var(--ink-2)' }}>Draft</b>. Claude writes from your Career profile proof and your <span style={{ color: 'var(--ink-2)' }}>{(window.LU_PERSONAS.find(p => p.id === opp.persona) || {}).name || 'persona'}</span> angle, and never invents anything. Nothing is sent: you copy it and send it yourself.
       </div>
     </div>
   );
@@ -544,38 +585,34 @@ function LatticeAnim() {
 }
 
 // ── Bottom instruction bar ───────────────────────────────────────────────
-function DetailInstructionBar({ instruction, setInstruction, channel, setChannel,
+function DetailInstructionBar({ instruction, setInstruction, type, setType, people, toKey, setToKey,
                                 onGenerate, generating, hasDrafts }) {
+  const TYPES = (window.LU_OUTREACH && window.LU_OUTREACH.TYPES) || {};
+  const sel = { height: 34, padding: '0 8px', background: 'var(--bg-0)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, fontFamily: 'var(--sans)', fontSize: 12.5, width: 180, minWidth: 0, flex: '0 1 180px' };
   return (
     <div style={{
       borderTop: '1px solid var(--line-2)',
       background: 'var(--bg-1)',
       padding: '14px 28px',
       flex: '0 0 auto',
-      display: 'flex', alignItems: 'center', gap: 14,
+      display: 'flex', alignItems: 'center', gap: 10,
     }}>
-      {/* Channel toggle */}
-      <div style={{ display: 'flex', gap: 0, border: '1px solid var(--line-2)', borderRadius: 3, padding: 2 }}>
-        {['Email', 'LinkedIn DM'].map(c => (
-          <button key={c} onClick={() => setChannel(c)} style={{
-            appearance: 'none', padding: '6px 10px',
-            background: channel === c ? 'var(--bg-3)' : 'transparent',
-            color: channel === c ? 'var(--ink-1)' : 'var(--ink-3)',
-            border: 'none', borderRadius: 2,
-            fontSize: 11.5, fontWeight: 500, letterSpacing: '0.005em',
-            cursor: 'pointer', transition: 'all .12s',
-          }}>{c}</button>
-        ))}
-      </div>
+      <select aria-label="Who the note is for" value={toKey} onChange={(e) => setToKey(e.target.value)} style={sel}>
+        <option value="">No specific person</option>
+        {people.map((p) => <option key={p.key} value={p.key}>{p.name}{p.title ? ' · ' + p.title.slice(0, 40) : ''}</option>)}
+      </select>
+      <select aria-label="Kind of note" value={type} onChange={(e) => setType(e.target.value)} style={sel}>
+        {Object.entries(TYPES).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
+      </select>
 
       {/* Instruction input */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div style={{ flex: '1 1 120px', minWidth: 0, position: 'relative' }}>
         <Icon name="sparkles" size={14} stroke={1.4} style={{
           position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
           color: 'var(--ink-3)', pointerEvents: 'none',
         }}/>
         <input value={instruction} onChange={(e) => setInstruction(e.target.value)}
-          placeholder={hasDrafts ? '"Make it warmer", "Shorter", "Lead with the M&A angle"...' : 'Optional instruction — leave blank for a clean first draft'}
+          placeholder={hasDrafts ? 'Revise the latest: "warmer", "shorter", "lead with the M&A work"…' : 'Optional: anything to emphasise or avoid'}
           onKeyDown={(e) => { if (e.key === 'Enter' && !generating) onGenerate(); }}
           style={{
             width: '100%', height: 34, padding: '0 12px 0 32px',
@@ -590,76 +627,10 @@ function DetailInstructionBar({ instruction, setInstruction, channel, setChannel
 
       <Btn variant="primary" size="m" icon={generating ? null : 'arrow-right'}
         onClick={onGenerate} disabled={generating}>
-        {generating ? 'Drafting…' : (hasDrafts ? 'Regenerate' : 'Draft outreach')}
+        {generating ? 'Drafting…' : (hasDrafts && instruction.trim() ? 'Revise' : 'Draft')}
       </Btn>
     </div>
   );
-}
-
-// ── Draft composition (mock) ──────────────────────────────────────────────
-function composeDraft(opp, persona, channel, instruction) {
-  const contactName = opp.contact?.name?.split(' ')[0] || 'there';
-  const isWarm = opp.contact?.warmth === 'strong' || opp.contact?.warmth === 'warm';
-  const tone = (instruction || '').toLowerCase();
-
-  if (channel === 'LinkedIn DM') {
-    if (tone.includes('shorter') || tone.includes('short')) {
-      return `${contactName} — ${isWarm ? 'good to see you in the feed.' : 'wanted to reach out directly.'}
-
-The ${opp.role} mandate at ${opp.company} looks like a real fit for the work I've been doing — happy to send a one-page positioning if useful.
-
-— [Sender]`;
-    }
-    return `${contactName},
-
-${isWarm ? 'Hope all\'s well — saw your post last week on ' + (opp.notes.includes('AI') ? 'AI strategy' : 'transformation') + ', shared with a few people.' : 'We met briefly through ' + (opp.source || 'a mutual') + '; reaching out directly.'}
-
-The ${opp.role} role at ${opp.company} sits squarely in the work I've focused on for the last decade. ${persona.positioning.split('.')[0]}. If there's a useful conversation here, I'd welcome 20 minutes.
-
-I'll keep it brief — happy to send a tighter positioning note if it's helpful.
-
-Best,
-[Sender]`;
-  }
-
-  // Email
-  const subject = (tone.includes('warmer') || tone.includes('warm'))
-    ? `Following up — ${opp.role.split(',')[0]} at ${opp.company}`
-    : `${opp.role.split(',')[0]} — ${opp.company}`;
-
-  if (tone.includes('shorter') || tone.includes('short')) {
-    return `Subject: ${subject}
-
-${contactName},
-
-I'll be direct: the ${opp.role} mandate is a clean fit for the work I've done over the last ten years — ${persona.skills.slice(0, 2).join(' and ').toLowerCase()}, at scale.
-
-Worth twenty minutes to compare notes?
-
-Best,
-[Sender]`;
-  }
-
-  return `Subject: ${subject}
-
-${contactName},
-
-${isWarm
-  ? `Thank you for the introduction — happy to be in touch.`
-  : `Reaching out following ${opp.source || 'the recent connection'}.`} I understand ${opp.company} is searching for a ${opp.role} — that mandate sits at the center of my last decade of work.
-
-A short orientation, if useful: ${persona.positioning}
-
-In particular for ${opp.company}, three areas where I think I'd add value quickly:
-
-  — ${persona.skills[0]} at the level the board will expect
-  — ${persona.skills[1]} — a recurring theme in this kind of role
-  — A track record of ${persona.skills[2] ? persona.skills[2].toLowerCase() : 'execution'} that I'm happy to walk through
-
-I'd welcome twenty minutes to compare notes on what ${opp.company} actually needs in year one. I can come prepared with a point of view; not a generic pitch.
-
-Best regards,
-[Sender]`;
 }
 
 Object.assign(window, { DetailPanel, LatticeAnim, DetailField });

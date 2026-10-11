@@ -33,6 +33,10 @@
     calendarLookbackDays: 365,
   };
 
+  // House style for every text Claude writes that Dhruv reads or sends (outreach,
+  // persona lens, resumes). Dhruv's direction, 2026-10-11.
+  const HOUSE_STYLE = `Writing style: professional and precise, but never curt. Warm and considerate toward the reader, but not verbose or flowery. Articulate, with a little creativity in the phrasing, yet businesslike and to the point. Plain words over jargon. No clichés or filler ("I hope this finds you well", "passionate", "excited to", "synergy", "leverage", "reach out to touch base"). No exclamation marks. Short paragraphs; every sentence earns its place.`;
+
   // Claude models Dhruv can pick per task (Settings → Claude models & usage).
   // Prices are USD per million tokens (platform.claude.com/docs/en/about-claude/pricing,
   // checked 2026-10-11): input, output, 5-minute cache write, cache read.
@@ -52,6 +56,7 @@
     dupes:    { label: 'Duplicate checks',            def: 'haiku',  typical: { in: 2500,  out: 800 } },
     tagging:  { label: 'Linking proof to personas',   def: 'haiku',  typical: { in: 9000,  out: 1500 } },
     lens:     { label: 'Persona strength and gaps',   def: 'sonnet', typical: { in: 8000,  out: 1800 } },
+    outreach: { label: 'Outreach notes',              def: 'sonnet', typical: { in: 6000,  out: 900 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {
@@ -1400,7 +1405,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   // Narrow hooks for feature modules in separate files (e.g. career-store.js).
   window.LU_CORE = {
     doc: () => DOC, markDirty, flush, claude, extractJson, nowIso, pill,
-    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor, passive: () => PASSIVE,
+    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor, passive: () => PASSIVE, houseStyle: HOUSE_STYLE,
     models: { parse: CONFIG.parseModel, quick: CONFIG.testModel },
   };
 
