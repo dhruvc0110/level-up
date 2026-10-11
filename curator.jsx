@@ -25,7 +25,7 @@ function PersonaCurator({ persona, onClose, onSave }) {
   const isNew = !persona?.id;
   const [draft, setDraft] = React.useState(() => ({
     id: persona?.id || 'pers-' + Math.random().toString(36).slice(2, 7),
-    code: persona?.code || 'P-0' + (window.LU_PERSONAS.length + 1),
+    code: persona?.code || (window.nextPersonaCode ? window.nextPersonaCode() : 'P-0' + (window.LU_PERSONAS.length + 1)),
     name: persona?.name || '',
     positioning: persona?.positioning || '',
     skills: persona?.skills || [],

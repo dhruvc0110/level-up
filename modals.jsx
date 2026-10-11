@@ -103,7 +103,7 @@ function AddOpportunityModal({ onClose, onSave }) {
           </Field>
           <Field label="Persona">
             <Select value={form.persona} onChange={(v) => upd('persona', v)}
-              options={window.LU_PERSONAS.map(p => ({ value: p.id, label: `${p.code} · ${p.name}` }))}/>
+              options={(window.activePersonas ? window.activePersonas(form.persona) : window.LU_PERSONAS).map(p => ({ value: p.id, label: `${p.code} · ${p.name}` }))}/>
           </Field>
           <Field label="Source">
             <TextInput value={form.source} onChange={(v) => upd('source', v)}
@@ -171,7 +171,7 @@ function PersonaModal({ persona, onClose, onSave }) {
   const isNew = !persona?.id;
   const [form, setForm] = React.useState(persona || {
     id: 'pers-' + Math.random().toString(36).slice(2, 7),
-    name: '', code: 'P-0' + (window.LU_PERSONAS.length + 1),
+    name: '', code: window.nextPersonaCode ? window.nextPersonaCode() : 'P-0' + (window.LU_PERSONAS.length + 1),
     positioning: '', skills: [],
     companySize: '', targetSectors: [], tone: '',
     opportunities: 0,

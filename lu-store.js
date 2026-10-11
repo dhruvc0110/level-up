@@ -50,6 +50,7 @@
     company:  { label: 'Company profiles (web search)', def: 'sonnet', typical: { in: 20000, out: 900, searches: 3 } },
     career:   { label: 'Reading resumes',             def: 'sonnet', typical: { in: 9000,  out: 7000 } },
     dupes:    { label: 'Duplicate checks',            def: 'haiku',  typical: { in: 2500,  out: 800 } },
+    tagging:  { label: 'Linking proof to personas',   def: 'haiku',  typical: { in: 9000,  out: 1500 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {
@@ -591,18 +592,23 @@
     }
   }
 
-  const PERSONAS_FOR_PROMPT = [
-    '- cio (P-01) Enterprise CIO — Fortune 1000 board-level, $500M+ budgets, Financial Services / Industrials / Healthcare',
-    '- transformation (P-02) Transformation Director — Mid-market / PE-backed, ERP rescues, post-merger integration',
-    '- md (P-03) Managing Director, Professional Services — Top-tier advisory (Big Four-adjacent), $20M+/year practice',
-    '- fractional (P-04) Fractional Technology Advisor — PE-backed $50M-$1B, 2-3 day/wk, pre/post transaction',
-    '- operating (P-05) PE Operating Partner — Embedded in GP, tech diligence across portfolio',
-    '- board (P-06) Board Director — Independent seat, audit committee, cyber + AI risk oversight',
-  ].join('\n');
+  // Built from the personas in Settings → Personas (retired ones left out), so a
+  // new or edited persona is used from the next email or job onwards.
+  function activePersonas() { return (DOC.personas || []).filter((p) => !p.retired); }
+  function personasForPrompt() {
+    const list = activePersonas();
+    if (!list.length) return '- (no personas defined)';
+    return list.map((p) => {
+      const bits = [p.companySize, (p.targetSectors || []).slice(0, 4).join(' / '), (p.skills || []).slice(0, 5).join(', ')].filter(Boolean).join('; ');
+      const pos = String(p.positioning || '').replace(/\s+/g, ' ').slice(0, 160);
+      return `- ${p.id} (${p.code || ''}) ${p.name}${bits ? ' — ' + bits : ''}${pos ? '. ' + pos : ''}`;
+    }).join('\n');
+  }
+  function personaEnum() { return activePersonas().map((p) => JSON.stringify(p.id)).join('|') || '"none"'; }
 
-  const PARSING_SYSTEM_PROMPT = `You are parsing emails for a senior technology executive who is exploring SIX career personas in parallel:
+  const PARSING_SYSTEM_PROMPT = () => `You are parsing emails for a senior technology executive who is exploring several career personas in parallel:
 
-${PERSONAS_FOR_PROMPT}
+${personasForPrompt()}
 
 For each email, decide if it represents a genuine career opportunity — recruiter outreach, search-firm inquiry, network referral about a specific role, board introduction, fractional engagement scope, etc. NOT opportunities: newsletters, marketing, billing, generic networking pings, "let's catch up" without a role attached.
 
@@ -615,7 +621,7 @@ Output a SINGLE JSON object, no prose around it:
   "company": "Acme Corp" | null,
   "role": "Chief Information Officer" | null,
   "contact": { "name": "...", "title": "...", "warmth": "strong"|"warm"|"cold"|"recruiter" } | null,
-  "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
+  "persona": ${personaEnum()} | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null,
   "notes": "additional context" | null
@@ -640,7 +646,7 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
 
   async function parseEmail(from, subject, body) {
     const msg = `From: ${from}\nSubject: ${subject}\n\n${(body || '').slice(0, 5000)}`;
-    const resp = await claude(modelFor('gmail'), PARSING_SYSTEM_PROMPT, msg, 1500, null, 'gmail');
+    const resp = await claude(modelFor('gmail'), PARSING_SYSTEM_PROMPT(), msg, 1500, null, 'gmail');
     const text = replyText(resp) || '{}';
     try { return extractJson(text); }
     catch (e) { return { is_opportunity: false, confidence: 1, reasoning: 'Claude response did not parse as JSON.', _raw: text.slice(0, 500) }; }
@@ -725,9 +731,9 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
   // LinkedIn saved jobs (sent by the "Sync to Level Up" bookmark button)
   // ════════════════════════════════════════════════════════════════════════
 
-  const LINKEDIN_SYSTEM_PROMPT = `You are reading LinkedIn job postings that a senior technology executive SAVED. They are exploring SIX career personas in parallel:
+  const LINKEDIN_SYSTEM_PROMPT = () => `You are reading LinkedIn job postings that a senior technology executive SAVED. They are exploring several career personas in parallel:
 
-${PERSONAS_FOR_PROMPT}
+${personasForPrompt()}
 
 Each input is the text of one saved-job card (title, company, location, sometimes posting age or applicant count). Treat it as an opportunity (is_opportunity true) unless it is clearly not a job. contact is the poster or recruiter only if named, else null. Pick the best-fitting persona and rate fit 1-5 for a senior executive.
 
@@ -740,7 +746,7 @@ Output a SINGLE JSON object, no prose around it:
   "company": "Acme Corp" | null,
   "role": "Chief Information Officer" | null,
   "contact": { "name": "...", "title": "...", "warmth": "recruiter" } | null,
-  "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
+  "persona": ${personaEnum()} | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null,
   "notes": "any other useful detail from the card" | null,
@@ -800,7 +806,7 @@ company_size and industry come from what you know about the company; use null if
       DOC.triage.unshift(row);
       added++;
       try {
-        const resp = await claude(modelFor('linkedin'), LINKEDIN_SYSTEM_PROMPT, `${text}\n\nLink: ${jobUrl}`, 1200, null, 'linkedin');
+        const resp = await claude(modelFor('linkedin'), LINKEDIN_SYSTEM_PROMPT(), `${text}\n\nLink: ${jobUrl}`, 1200, null, 'linkedin');
         row.parsed = extractJson(replyText(resp) || '{}');
         const d = row.parsed;
         // Card-only: what Claude can add without the job page. Marked partial.
@@ -824,9 +830,9 @@ company_size and industry come from what you know about the company; use null if
   }
 
   // ── Enrich one job from its full LinkedIn page ──────────────────────────
-  const LINKEDIN_DETAIL_PROMPT = `You are reading the full LinkedIn job page for a role a senior technology executive is considering. They are exploring SIX career personas in parallel:
+  const LINKEDIN_DETAIL_PROMPT = () => `You are reading the full LinkedIn job page for a role a senior technology executive is considering. They are exploring several career personas in parallel:
 
-${PERSONAS_FOR_PROMPT}
+${personasForPrompt()}
 
 You get the page text plus a list of LinkedIn profiles linked on the page (URL + nearby text). The hiring manager / poster usually appears under "Meet the hiring team" or "Job poster" with a connection degree (1st, 2nd, 3rd). LinkedIn's "People you can reach out to" section lists people who could help (with degree and a reason such as "Company alum from X" or "School alumni from Y"); employees of the company may also appear with their degree.
 
@@ -844,7 +850,7 @@ Output a SINGLE JSON object, no prose around it:
   "reach_out": [ { "name": "...", "title": "short headline", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null, "reason": "e.g. Company alum from Cognizant / Partner at the company" } ],
   "reach_out_note": "summary line LinkedIn shows without names, e.g. School alumni from IIM Lucknow" | null,
   "summary": "max 35 words: the mandate in plain words (scope, scale, reporting line)",
-  "persona": "cio"|"transformation"|"md"|"fractional"|"operating"|"board" | null,
+  "persona": ${personaEnum()} | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null
 }
@@ -887,7 +893,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     const text = String(job.text || '').slice(0, 9000);
     const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
     const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
-    const ask = () => claude(modelFor('linkedin'), LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 4000, null, 'linkedin');
+    const ask = () => claude(modelFor('linkedin'), LINKEDIN_DETAIL_PROMPT(), `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 4000, null, 'linkedin');
     const answer = (resp) => extractJson(replyText(resp) || '{}');
     let d;
     try { d = answer(await ask()); }
@@ -1285,8 +1291,11 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     const arr = DOC[coll];
     const item = Object.assign({}, body, { id });
     const i = arr.findIndex((x) => x.id === id);
-    if (i >= 0) arr[i] = item; else arr.unshift(item);
+    const prev = i >= 0 ? arr[i] : null;
+    if (i >= 0) arr[i] = item; else if (coll === 'personas') arr.push(item); else arr.unshift(item);
     markDirty();
+    // Career profile re-links its proof when a persona is added or redefined.
+    if (coll === 'personas') window.dispatchEvent(new CustomEvent('lu:persona-saved', { detail: { prev, next: item } }));
     if (coll === 'opportunities') notifyOpportunities();
     return item;
   }

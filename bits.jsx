@@ -170,11 +170,24 @@ function PersonaTag({ personaId, size = 's' }) {
   );
 }
 
+// Personas you can pick from: retired ones are hidden, except the one already
+// chosen (so an old job still shows its label).
+function activePersonas(keepId) {
+  return (window.LU_PERSONAS || []).filter(p => !p.retired || p.id === keepId);
+}
+// Next free code: P-07, P-08… (retired personas keep their codes).
+function nextPersonaCode() {
+  const n = Math.max(0, ...(window.LU_PERSONAS || []).map(p => +String(p.code || '').replace(/\D/g, '') || 0)) + 1;
+  return 'P-' + String(n).padStart(2, '0');
+}
+
 function PersonaDot({ personaId, size = 8 }) {
   const idx = window.LU_PERSONAS.findIndex(x => x.id === personaId);
   // Each persona gets a slot on a quiet hue ring — used as tiny indicator dots
   const hues = [250, 280, 170, 80, 30, 200];
-  const c = `oklch(70% 0.05 ${hues[idx] ?? 0})`;
+  // Personas beyond the first six get evenly spread hues (golden angle).
+  const hue = idx < 0 ? 0 : idx < hues.length ? hues[idx] : Math.round((hues[hues.length - 1] + (idx - hues.length + 1) * 137.5) % 360);
+  const c = `oklch(70% 0.05 ${hue})`;
   return <span style={{
     display: 'inline-block', width: size, height: size,
     borderRadius: '50%', background: c, flex: '0 0 auto',
@@ -590,5 +603,5 @@ Object.assign(window, {
   Icon, PersonaTag, PersonaDot, stageColor, StageBar,
   FitStars, DueChip, dueState, WarmthDot,
   Btn, Field, TextInput, TextArea, Select,
-  JobIntel, NetworkAt, CompanyBrief,
+  JobIntel, NetworkAt, CompanyBrief, activePersonas, nextPersonaCode,
 });

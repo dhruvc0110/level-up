@@ -114,7 +114,7 @@
   // ── Extraction ──────────────────────────────────────────────────────────
   function extractPrompt(kind) {
     const doc = core().doc();
-    const personas = (doc.personas || []).map((p) => `- ${p.id}: ${p.name}`).join('\n');
+    const personas = (doc.personas || []).filter((p) => !p.retired).map((p) => `- ${p.id}: ${p.name}`).join('\n');
     const themes = [...new Set(C().achievements.flatMap((a) => a.themes || []))].slice(0, 60).join(', ');
     const skills = [...new Set(C().achievements.flatMap((a) => a.skills || []))].slice(0, 60).join(', ');
     return `You extract a senior executive's career facts from ${kind === 'linkedin' ? 'their LinkedIn profile (PDF export)' : 'one of their resumes'} into structured data for a career knowledge base.
@@ -519,6 +519,65 @@ Output a SINGLE JSON object, no prose around it:
     return markRewordedDuplicates(buildProposal(extracted, { kind, name: file.name, driveId: stored.id, driveUrl: stored.url }));
   }
 
+  // ── Personas: which proof supports each one ─────────────────────────────
+  // Achievements get persona tags when a resume is read. A persona added or
+  // redefined later is re-checked against the whole profile in one Claude pass
+  // (achievements and expertise), replacing that persona's tags only.
+  const PERSONA_FIELDS = ['name', 'positioning', 'skills', 'companySize', 'targetSectors'];
+  const personaDef = (p) => JSON.stringify(PERSONA_FIELDS.map((k) => p && p[k] || null));
+  const RELINK_PROMPT = 'You decide which parts of a senior executive\'s career record are genuine evidence for one target persona (a kind of role they are pursuing). Include an item only if a hiring panel for that persona would see it as relevant proof: matching responsibilities, results, industries, capabilities or platforms. Be selective; leave out generic items. Output a single JSON object and nothing else.';
+  async function relinkPersona(persona) {
+    const c = C();
+    if (!persona || !persona.id || persona.retired) return null;
+    if (!c.achievements.length && !(c.expertise || []).length) return { achievements: 0, expertise: 0 };
+    const roleOf = (a) => c.roles.find((r) => r.id === a.roleId) || {};
+    const ach = c.achievements, exp = c.expertise || [];
+    const def = [`Persona: ${persona.code || ''} ${persona.name}`, persona.positioning && `Positioning: ${persona.positioning}`,
+      (persona.skills || []).length && `Skills it needs: ${persona.skills.join(', ')}`, persona.companySize && `Company size: ${persona.companySize}`,
+      (persona.targetSectors || []).length && `Target sectors: ${persona.targetSectors.join(', ')}`].filter(Boolean).join('\n');
+    const user = def + '\n\nACHIEVEMENTS:\n' + ach.map((a, i) => `A${i}: ${a.text} [${roleOf(a).title || ''}, ${roleOf(a).company || ''}]`).join('\n')
+      + '\n\nEXPERTISE:\n' + exp.map((x, i) => `E${i}: ${x.type}: ${x.name}`).join('\n')
+      + '\n\nList the evidence for this persona. Format: {"achievements": ["A0", ...], "expertise": ["E3", ...]}';
+    const model = core().modelFor ? core().modelFor('tagging') : core().models.quick;
+    const resp = await core().claude(model, RELINK_PROMPT, user, 12000, null, 'tagging');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    let d;
+    try { d = core().extractJson(texts.length ? texts[texts.length - 1].text : ''); }
+    catch (e) { throw new Error(resp.stop_reason === 'max_tokens' ? 'The answer was cut off. Try again.' : 'Claude’s reply could not be read. Try again.'); }
+    const pick = (list, prefix) => new Set((Array.isArray(list) ? list : []).map((s) => String(s).trim()).filter((s) => s[0] === prefix).map((s) => +s.slice(1)).filter((n) => Number.isInteger(n)));
+    const A = pick(d.achievements, 'A'), E = pick(d.expertise, 'E');
+    const set = (item, on) => {
+      const cur = (item.personas || []).filter((id) => id !== persona.id);
+      item.personas = on ? [...cur, persona.id] : cur;
+    };
+    ach.forEach((a, i) => set(a, A.has(i)));
+    exp.forEach((x, i) => set(x, E.has(i)));
+    c.personaLinks = c.personaLinks || {};
+    c.personaLinks[persona.id] = { def: personaDef(persona), at: now(), achievements: A.size, expertise: E.size };
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+    return { achievements: A.size, expertise: E.size };
+  }
+  // Has this persona been linked with its current definition?
+  function linkStatus(persona) {
+    const l = (C().personaLinks || {})[persona.id];
+    if (!l) return { linked: false };
+    return { linked: true, current: l.def === personaDef(persona), at: l.at, achievements: l.achievements, expertise: l.expertise };
+  }
+  window.addEventListener('lu:persona-saved', async (e) => {
+    const { prev, next } = e.detail || {};
+    if (!next || next.retired) return;
+    if (prev && personaDef(prev) === personaDef(next)) return; // nothing that affects proof changed
+    if (!C().achievements.length) return;
+    const label = (next.code ? next.code + ' ' : '') + next.name;
+    core().pill(`Linking your proof to ${label}…`, 'sticky');
+    try {
+      const r = await relinkPersona(next);
+      core().pill(`Linked ${r.achievements} achievements and ${r.expertise} expertise items to ${label}`);
+    } catch (err) {
+      core().pill(`Couldn’t link proof to ${label}: ${String(err.message || err).slice(0, 120)}. Try again from the Career map.`);
+    }
+  });
+
   // ── Editing ─────────────────────────────────────────────────────────────
   const listOf = (kind) => C()[kind];
   function update(kind, id, patch) {
@@ -588,6 +647,7 @@ Output a SINGLE JSON object, no prose around it:
     update, add, remove, confirm, setPerson, resolveConflict,
     reviewItems, isStale, graph, STALE_DAYS,
     findDuplicates, mergeDuplicates, keepSeparate, useVariant,
+    relinkPersona, linkStatus,
     data: () => C(),
     _test: { similarity, findRole, matchAchievement },
   };

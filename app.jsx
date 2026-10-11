@@ -188,6 +188,8 @@ function App() {
           <PersonasView personas={personas} opportunities={opportunities}
             onEdit={navOpenCurator}
             onAdd={() => navOpenCurator({})}
+            onRetire={(p) => savePersona({ ...p, retired: true })}
+            onRestore={(p) => savePersona({ ...p, retired: false })}
             onOpenOpp={(id) => pushNav({ view: 'pipeline', openOppId: id })}/>
         )}
         {view === 'network' && (

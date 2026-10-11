@@ -251,14 +251,17 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
-    id: 'personas', title: 'Personas', blurb: 'The six versions of you',
+    id: 'personas', title: 'Personas', blurb: 'The versions of you, and how they drive everything',
     body: () => <>
-      <GP>You're running several searches at once: Enterprise CIO, Transformation Director, Managing Director, Fractional Advisor, PE Operating Partner and Board Director. Each opportunity is tagged with the persona it fits, and Claude uses them when reading emails and jobs.</GP>
+      <GP>You're running several searches at once, one per persona. Each opportunity is tagged with the persona it fits, and your personas drive everything else: Claude uses your current list when reading emails, LinkedIn jobs and resumes, and your Career profile links its proof to each one.</GP>
       <GShot src="personas.jpg" caption="Personas: positioning, skills, targets, and how each is doing in the pipeline."/>
       <GList items={[
         <>Each card shows positioning, skills, company size, sectors, tone, and its strongest active opportunities.</>,
-        <><B>Edit</B> (pencil) or <B>New persona</B> opens the curator: identity, positioning, voice and targeting.</>,
+        <><B>Edit</B> (pencil) or <B>New persona</B> opens the curator: identity, positioning, voice and targeting. New personas get the next code (P-07, P-08…).</>,
+        <><B>Proof follows automatically.</B> When you create a persona, or change its name, positioning, skills, company size or sectors, Claude re-checks your whole Career profile and links the achievements and expertise that support it. The corner shows "Linked 9 achievements and 23 expertise items to P-07". Changing only the voice or tone doesn't trigger this.</>,
+        <><B>Retire</B> (on each card) takes a persona out of new job matching and your Career profile. Past jobs keep their label. It moves to <B>Retired personas</B> at the bottom, where <B>Bring back</B> restores it.</>,
       ]}/>
+      <GTip>Keep each persona's <B>positioning</B>, <B>skills</B> and <B>sectors</B> true to you: Claude matches jobs and links your proof against exactly those words.</GTip>
       <GTip>The curator's <B>voice preview</B> is sample text for now.</GTip>
     </>,
   },
@@ -376,6 +379,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Personas drive everything: new or edited personas are used straight away for Gmail, LinkedIn and resume reading, and Claude links your Career profile proof to them automatically. Personas can be retired and brought back.',
           'Career profile: add to every tab by hand: a role, expertise (and change its name or level), degrees, board seats, publications and certifications (with Edit on each), or paste a note for Claude to read. Each tab now opens at the top.',
           'Claude costs under your control: Settings \u2192 Claude models & usage lets you pick the model for each job (Haiku is about 20\u00d7 cheaper than Sonnet) and shows this month\u2019s spend per job. Level Up now also caches its instructions, so batches cost less.',
           'Career profile: import your resumes and LinkedIn profile into one knowledge base, review every change before it\u2019s applied, and see what needs refreshing.',

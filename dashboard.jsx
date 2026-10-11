@@ -405,7 +405,7 @@ function MomentumModule({ opps }) {
 
 // ── 5. Personas module ─────────────────────────────────────────────────────
 function PersonasModule({ opps, onNav }) {
-  const data = window.LU_PERSONAS.map(p => ({
+  const data = (window.activePersonas ? window.activePersonas() : window.LU_PERSONAS).map(p => ({
     ...p,
     count: opps.filter(o => o.persona === p.id).length,
     avgFit: (() => {

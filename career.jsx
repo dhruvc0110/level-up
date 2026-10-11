@@ -38,7 +38,7 @@ function FreshDot({ fact }) {
 function PersonaToggles({ value, onChange }) {
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      {(window.LU_PERSONAS || []).map((p) => {
+      {(window.LU_PERSONAS || []).filter((p) => !p.retired).map((p) => {
         const on = (value || []).includes(p.id);
         return (
           <button key={p.id} onClick={() => onChange(on ? value.filter((x) => x !== p.id) : [...(value || []), p.id])} style={{

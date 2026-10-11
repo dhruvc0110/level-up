@@ -366,7 +366,7 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
           <Select
             value={draft.persona}
             onChange={v => update('persona', v)}
-            options={[{ value: '', label: '— select —' }, ...window.LU_PERSONAS.map(p => ({ value: p.id, label: p.code + ' · ' + p.name }))]}
+            options={[{ value: '', label: '— select —' }, ...(window.activePersonas ? window.activePersonas(draft.persona) : window.LU_PERSONAS).map(p => ({ value: p.id, label: p.code + ' · ' + p.name }))]}
           />
         </Field>
         <Field label="Fit">

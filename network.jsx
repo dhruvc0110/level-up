@@ -133,7 +133,7 @@ function NetworkHeader({ count, search, setSearch, filter, setFilter, personaFil
             fontFamily: 'var(--sans)',
           }}>
           <option value="all">Any</option>
-          {window.LU_PERSONAS.map(p => (
+          {(window.activePersonas ? window.activePersonas() : window.LU_PERSONAS).map(p => (
             <option key={p.id} value={p.id}>{p.code} · {p.name}</option>
           ))}
         </select>

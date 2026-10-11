@@ -203,7 +203,7 @@ function DetailContext({ opp, onUpdate }) {
       <DetailField label="Persona">
         <Select value={opp.persona}
           onChange={(v) => update({ persona: v })}
-          options={window.LU_PERSONAS.map(p => ({ value: p.id, label: `${p.code} · ${p.name}` }))}/>
+          options={(window.activePersonas ? window.activePersonas(opp.persona) : window.LU_PERSONAS).map(p => ({ value: p.id, label: `${p.code} · ${p.name}` }))}/>
       </DetailField>
 
       {/* Fit score */}

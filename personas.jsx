@@ -1,18 +1,35 @@
 // Level Up — Personas view & edit modal
 
-function PersonasView({ personas, opportunities, onEdit, onAdd, onOpenOpp }) {
+function PersonasView({ personas, opportunities, onEdit, onAdd, onOpenOpp, onRetire, onRestore }) {
+  const active = personas.filter(p => !p.retired);
+  const retired = personas.filter(p => p.retired);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <PersonasHeader count={personas.length} onAdd={onAdd}/>
+      <PersonasHeader count={active.length} onAdd={onAdd}/>
       <div className="lu-main-scroll" style={{ padding: '24px 28px 40px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {personas.map(p => (
+          {active.map(p => (
             <PersonaCard key={p.id} persona={p}
               opps={opportunities.filter(o => o.persona === p.id)}
               onEdit={() => onEdit(p)}
+              onRetire={onRetire ? () => { if (window.confirm(`Retire ${p.code} ${p.name}? It leaves your Career map and new job matching. Past jobs keep their label, and you can bring it back any time.`)) onRetire(p); } : null}
               onOpenOpp={onOpenOpp}/>
           ))}
         </div>
+        {retired.length > 0 && (
+          <div style={{ marginTop: 28 }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>Retired personas</div>
+            {retired.map(p => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: '1px solid var(--line-1)', fontSize: 13.5 }}>
+                <PersonaDot personaId={p.id} size={7}/>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)' }}>{p.code}</span>
+                <span style={{ flex: 1, color: 'var(--ink-2)' }}>{p.name}</span>
+                <span style={{ fontSize: 12, color: 'var(--ink-4)' }}>{opportunities.filter(o => o.persona === p.id).length} jobs</span>
+                {onRestore && <Btn variant="ghost" size="s" onClick={() => onRestore(p)}>Bring back</Btn>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -45,7 +62,7 @@ function PersonasHeader({ count, onAdd }) {
   );
 }
 
-function PersonaCard({ persona, opps, onEdit, onOpenOpp }) {
+function PersonaCard({ persona, opps, onEdit, onRetire, onOpenOpp }) {
   const [expanded, setExpanded] = React.useState(false);
   const avgFit = opps.length ? (opps.reduce((a, b) => a + b.fit, 0) / opps.length) : 0;
   const topOpps = [...opps].sort((a, b) => b.fit - a.fit).slice(0, 3);
@@ -89,6 +106,12 @@ function PersonaCard({ persona, opps, onEdit, onOpenOpp }) {
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.borderColor = 'var(--line-1)'; }}>
           <Icon name="edit" size={13} stroke={1.5}/>
         </button>
+        {onRetire && (
+          <button onClick={onRetire} title="Retire persona"
+            style={{ appearance: 'none', background: 'none', border: 'none', padding: '6px 0 0', cursor: 'pointer', fontSize: 11.5, color: 'var(--ink-4)', textDecoration: 'underline', textUnderlineOffset: 3, flex: '0 0 auto' }}>
+            Retire
+          </button>
+        )}
       </div>
 
       {/* Positioning */}
