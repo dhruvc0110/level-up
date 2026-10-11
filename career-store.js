@@ -613,7 +613,9 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
     const c = C();
     const parts = [c.achievements.length, (c.expertise || []).length, c.roles.length, (c.boards || []).length, (c.credentials || []).length];
     const latest = [c.achievements, c.expertise || [], c.roles, c.education || [], c.boards || []].flat().reduce((m, x) => (x.updatedAt && x.updatedAt > m ? x.updatedAt : m), '');
-    return parts.join('.') + '|' + latest;
+    // Re-linking changes which proof a persona sees without editing any fact.
+    const linked = [c.expertiseLinkedAt || '', ...Object.values(c.personaLinks || {}).map((l) => l.at || '')].sort().pop() || '';
+    return parts.join('.') + '|' + latest + '|' + linked;
   }
   async function assessPersona(persona) {
     const c = C();
@@ -670,6 +672,7 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
   window.addEventListener('lu:persona-saved', async (e) => {
     const { prev, next } = e.detail || {};
     if (!next || next.retired) return;
+    if (core().passive && core().passive()) return; // another window is in charge; it can't save here
     if (prev && personaDef(prev) === personaDef(next)) return; // nothing that affects proof changed
     if (!C().achievements.length) return;
     const label = (next.code ? next.code + ' ' : '') + next.name;
@@ -688,6 +691,14 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
     const item = listOf(kind).find((x) => x.id === id);
     if (!item) return null;
     Object.assign(item, patch, { updatedAt: now(), confirmedAt: now() });
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+    return item;
+  }
+  // Persona links only: unlike update(), this doesn't count as confirming the fact is still true.
+  function setPersonaTags(kind, id, personas) {
+    const item = listOf(kind).find((x) => x.id === id);
+    if (!item) return null;
+    item.personas = personas; item.updatedAt = now();
     core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
     return item;
   }
@@ -748,7 +759,7 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
 
   window.LU_CAREER = {
     importFile, buildProposal, proposalCounts, applyProposal,
-    update, add, remove, confirm, setPerson, resolveConflict,
+    update, add, remove, confirm, setPerson, resolveConflict, setPersonaTags,
     reviewItems, isStale, graph, STALE_DAYS,
     findDuplicates, mergeDuplicates, keepSeparate, useVariant,
     relinkPersona, linkStatus, linkExpertise, assessPersona, lensFor,

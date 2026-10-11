@@ -399,6 +399,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Fixes: linking an achievement to a persona on the map no longer counts as confirming it, and the persona lens now notices when expertise or proof has been re-linked.',
           'Career map: a new Map tab shows your roles flowing into themes of proof and on to your personas. Pick a persona to see its share light up, and get a strength score, gaps to close and your best proof. First time: click Link expertise.',
           'Personas drive everything: new or edited personas are used straight away for Gmail, LinkedIn and resume reading, and Claude links your Career profile proof to them automatically. Personas can be retired and brought back.',
           'Career profile: add to every tab by hand: a role, expertise (and change its name or level), degrees, board seats, publications and certifications (with Edit on each), or paste a note for Claude to read. Each tab now opens at the top.',

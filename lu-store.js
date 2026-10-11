@@ -1400,7 +1400,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   // Narrow hooks for feature modules in separate files (e.g. career-store.js).
   window.LU_CORE = {
     doc: () => DOC, markDirty, flush, claude, extractJson, nowIso, pill,
-    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor,
+    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor, passive: () => PASSIVE,
     models: { parse: CONFIG.parseModel, quick: CONFIG.testModel },
   };
 

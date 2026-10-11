@@ -290,7 +290,9 @@ function MapPanel({ c, sel, data, label, onClose, onEditRoles }) {
   const active = (window.LU_PERSONAS || []).filter((p) => !p.retired);
   const togglePersona = (a, pid) => {
     const has = (a.personas || []).includes(pid);
-    window.LU_CAREER.update('achievements', a.id, { personas: has ? a.personas.filter((x) => x !== pid) : [...(a.personas || []), pid] });
+    const next = has ? a.personas.filter((x) => x !== pid) : [...(a.personas || []), pid];
+    const L = window.LU_CAREER;
+    if (L.setPersonaTags) L.setPersonaTags('achievements', a.id, next); else L.update('achievements', a.id, { personas: next });
   };
   const roleOf = (a) => c.roles.find((r) => r.id === a.roleId) || {};
   const KIND = { outcome: 0, inflight: 1, responsibility: 2 };
