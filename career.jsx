@@ -62,6 +62,55 @@ function Chips({ items, mono }) {
   );
 }
 
+// ── Add / edit form for roles, expertise and the Education & boards lists ─
+// `req` marks the field that must be filled. Saving stamps the fact as
+// "Added by you" and confirmed today (career-store add/update).
+const CP_FIELDS = {
+  roles: [{ k: 'title', label: 'Title', req: true }, { k: 'company', label: 'Company', req: true }, { k: 'start', label: 'Start (YYYY-MM)' }, { k: 'end', label: 'End (YYYY-MM or present)' }, { k: 'location', label: 'Location' }],
+  expertise: [{ k: 'type', label: 'Type', options: Object.entries({ capability: 'Capability', industry: 'Industry', process: 'Business process', platform: 'Platform & technology', offering: 'Market offering', language: 'Language' }).map(([value, label]) => ({ value, label })) },
+    { k: 'name', label: 'Name', req: true }, { k: 'level', label: 'Your level', options: [{ value: '', label: 'Not rated' }, ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: n + ' of 5' }))] }],
+  education: [{ k: 'school', label: 'School', req: true }, { k: 'degree', label: 'Degree' }, { k: 'field', label: 'Field' }, { k: 'year', label: 'Year' }, { k: 'honors', label: 'Honours' }],
+  boards: [{ k: 'org', label: 'Organisation', req: true }, { k: 'role', label: 'Role' }, { k: 'start', label: 'Start (YYYY-MM)' }, { k: 'end', label: 'End (YYYY-MM or present)' }],
+  publications: [{ k: 'title', label: 'Title', req: true }, { k: 'venue', label: 'Where (publication or event)' }, { k: 'year', label: 'Year' }, { k: 'url', label: 'Link' }],
+  credentials: [{ k: 'name', label: 'Name', req: true }, { k: 'issuer', label: 'Issued by' }, { k: 'year', label: 'Year' }],
+};
+function EntryForm({ kind, initial, onDone }) {
+  const L = window.LU_CAREER;
+  const fields = CP_FIELDS[kind];
+  const [d, setD] = React.useState(() => {
+    const o = {};
+    fields.forEach((f) => { const v = initial && initial[f.k]; o[f.k] = v == null ? (f.options ? f.options[0].value : '') : String(v); });
+    return o;
+  });
+  const ok = fields.every((f) => !f.req || String(d[f.k] || '').trim());
+  // Bring the form into view: on long lists it can open below the fold.
+  const box = React.useRef(null);
+  React.useEffect(() => { if (box.current && box.current.scrollIntoView) box.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, []);
+  const save = () => {
+    const data = {};
+    fields.forEach((f) => { const v = String(d[f.k] || '').trim(); data[f.k] = f.k === 'level' ? (v ? +v : null) : (v || null); });
+    if (initial && initial.id) L.update(kind, initial.id, data);
+    else L.add(kind, kind === 'roles' ? Object.assign({ scope: {}, summary: null }, data) : data);
+    onDone();
+  };
+  return (
+    <div ref={box} style={{ padding: '12px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+        {fields.map((f) => (
+          <Field key={f.k} label={f.label + (f.req ? ' *' : '')}>
+            {f.options ? <Select value={d[f.k]} onChange={(v) => setD({ ...d, [f.k]: v })} options={f.options}/>
+              : <TextInput value={d[f.k]} onChange={(v) => setD({ ...d, [f.k]: v })}/>}
+          </Field>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <Btn variant="primary" size="s" onClick={save} disabled={!ok}>{initial && initial.id ? 'Save' : 'Add'}</Btn>
+        <Btn variant="ghost" size="s" onClick={onDone}>Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
 // ── Achievement row (view + edit) ────────────────────────────────────────
 function AchievementRow({ a, sourceNames }) {
   const [edit, setEdit] = React.useState(false);
@@ -318,23 +367,30 @@ function Level({ n }) {
   if (!n) return null;
   return <span title={n + ' of 5'} style={{ letterSpacing: 1, fontSize: 9, color: 'var(--ink-2)', marginLeft: 6 }}>{'●'.repeat(n)}<span style={{ color: 'var(--ink-4)' }}>{'○'.repeat(5 - n)}</span></span>;
 }
-function ExpertisePanel({ items }) {
+function ExpertisePanel({ items, adding, setAdding, editing, setEditing }) {
   const L = window.LU_CAREER;
   const types = Object.keys(EXPERTISE_LABELS).filter((t) => items.some((x) => x.type === t));
-  if (!types.length) return null;
+  const editItem = items.find((x) => x.id === editing);
   return (
     <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+        <div style={cpMono}>Expertise</div>
+        {!adding && !editItem && <button style={cpLink} onClick={() => setAdding(true)}>+ Add expertise</button>}
+        {!adding && !editItem && types.length > 0 && <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Click an item to change its name or level.</span>}
+      </div>
+      {adding && <div style={{ ...cpBox, padding: '4px 14px', marginBottom: 12 }}><EntryForm kind="expertise" onDone={() => setAdding(false)}/></div>}
       {types.map((t) => (
         <div key={t} style={{ marginBottom: 14 }}>
           <div style={{ ...cpMono, marginBottom: 8 }}>{EXPERTISE_LABELS[t]}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {items.filter((x) => x.type === t).sort((a, b) => (b.level || 0) - (a.level || 0)).map((x) => (
-              <span key={x.id} title={(x.category ? x.category + ' · ' : '') + (x.sources || []).length + ' source(s)'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 14, fontSize: 12.5, border: '1px solid var(--line-2)', color: 'var(--ink-1)' }}>
-                {x.name}<Level n={x.level}/>
+              <span key={x.id} title={(x.category ? x.category + ' · ' : '') + (x.sources || []).length + ' source(s)'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 14, fontSize: 12.5, border: '1px solid ' + (editing === x.id ? 'var(--ink-2)' : 'var(--line-2)'), color: 'var(--ink-1)' }}>
+                <button onClick={() => { setEditing(x.id); setAdding(false); }} style={{ appearance: 'none', border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', display: 'inline-flex', alignItems: 'center' }}>{x.name}<Level n={x.level}/></button>
                 <button onClick={() => { if (window.confirm('Remove "' + x.name + '"?')) L.remove('expertise', x.id); }} title="Remove" style={{ appearance: 'none', border: 'none', background: 'none', color: 'var(--ink-4)', cursor: 'pointer', fontSize: 12, padding: '0 0 0 4px' }}>×</button>
               </span>
             ))}
           </div>
+          {editItem && editItem.type === t && <div style={{ ...cpBox, padding: '4px 14px', marginTop: 10 }}><EntryForm kind="expertise" initial={editItem} onDone={() => setEditing(null)}/></div>}
         </div>
       ))}
     </div>
@@ -352,7 +408,11 @@ function CareerView() {
   const [proposal, setProposal] = React.useState(null);
   const [filter, setFilter] = React.useState(null);
   const [dupBusy, setDupBusy] = React.useState(null);
+  const [adding, setAdding] = React.useState(null);   // which list's Add form is open
+  const [editing, setEditing] = React.useState(null); // id of the entry being edited
+  const [note, setNote] = React.useState(null);       // pasted note: { name, text }
   const fileRef = React.useRef(null);
+  const scrollRef = React.useRef(null);
   if (!L) return <div style={{ padding: 40, color: 'var(--ink-2)' }}>The career profile didn't load. Refresh the page (Cmd+Shift+R).</div>;
   const c = L.data();
   const sourceNames = (ids) => (ids || []).map((id) => id === 'manual' ? 'Added by you' : ((c.sources.find((s) => s.id === id) || {}).name || 'Unknown source'));
@@ -408,7 +468,7 @@ function CareerView() {
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 18 }}>
           {CP_TABS.map((t) => (
-            <button key={t.id} onClick={() => { setTab(t.id); setFilter(null); }} style={{
+            <button key={t.id} onClick={() => { setTab(t.id); setFilter(null); setAdding(null); setEditing(null); if (scrollRef.current) scrollRef.current.scrollTop = 0; }} style={{
               appearance: 'none', cursor: 'pointer', padding: '9px 12px', fontSize: 13, border: 'none', background: 'transparent',
               color: tab === t.id ? 'var(--ink-1)' : 'var(--ink-3)', borderBottom: '2px solid ' + (tab === t.id ? 'var(--ink-1)' : 'transparent'),
             }}>{t.label}{t.id === 'review' && review.length ? ` (${review.length})` : ''}</button>
@@ -416,7 +476,7 @@ function CareerView() {
         </div>
       </div>
 
-      <div className="lu-main-scroll" style={{ padding: '20px 28px 60px' }}>
+      <div ref={scrollRef} className="lu-main-scroll" style={{ padding: '20px 28px 60px' }}>
         <div style={{ maxWidth: 920 }}>
           {/* Import bar */}
           <div style={{ ...cpBox, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -433,8 +493,15 @@ function CareerView() {
           {proposal && <ImportReview key={proposal.source.name + (proposal.position || '')} proposal={proposal} onApply={apply} onCancel={discard}/>}
 
           {tab === 'experience' && (
+            adding === 'roles' ? (
+              <div style={{ ...cpBox, padding: '6px 18px', marginBottom: 12 }}><EntryForm kind="roles" onDone={() => setAdding(null)}/></div>
+            ) : (
+              <div style={{ marginBottom: 12 }}><Btn variant="ghost" size="s" icon="plus" onClick={() => setAdding('roles')}>Add a role</Btn></div>
+            )
+          )}
+          {tab === 'experience' && (
             roles.length === 0 ? (
-              <div style={{ ...cpBox, padding: 28, color: 'var(--ink-3)', fontSize: 14 }}>No roles yet. Add your resume above. Each import adds to the profile and you review every change first.</div>
+              <div style={{ ...cpBox, padding: 28, color: 'var(--ink-3)', fontSize: 14 }}>No roles yet. Add your resume above, or add a role by hand. Each import adds to the profile and you review every change first.</div>
             ) : roles.map((r) => <RoleCard key={r.id} r={r} achievements={achFor(r.id)} sourceNames={sourceNames}/>)
           )}
 
@@ -451,8 +518,9 @@ function CareerView() {
             return (
               <div>
                 <div style={{ ...cpMono, marginBottom: 8 }}>Themes (how often your achievements show them)</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-3)', margin: '-4px 0 8px' }}>Themes and skills come from your achievements. To add one, edit an achievement on the Experience tab.</div>
                 <div style={{ marginBottom: 18 }}>{g.themes.length ? g.themes.map((t) => chip(t, 'theme')) : <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>None yet.</span>}</div>
-                <ExpertisePanel items={c.expertise || []}/>
+                <ExpertisePanel items={c.expertise || []} adding={adding === 'expertise'} setAdding={(v) => setAdding(v ? 'expertise' : null)} editing={editing} setEditing={setEditing}/>
                 <div style={{ ...cpMono, marginBottom: 8 }}>Skills shown in achievements</div>
                 <div style={{ marginBottom: 18 }}>{g.skills.length ? g.skills.map((s) => chip(s, 'skill')) : <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>None yet.</span>}</div>
                 {filter && (
@@ -477,16 +545,43 @@ function CareerView() {
             ['publications', 'Publications & talks', (x) => [x.title, x.venue, x.year].filter(Boolean).join(' · ')],
             ['credentials', 'Certifications & awards', (x) => [x.name, x.issuer, x.year].filter(Boolean).join(' · ')]].map(([k, label, line]) => (
             <div key={k} style={{ ...cpBox, padding: '14px 16px', marginBottom: 12 }}>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>{label}</div>
-              {c[k].length === 0 ? <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>None yet.</div> : c[k].map((x) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <div className="eyebrow">{label}</div>
+                {adding !== k && <button style={cpLink} onClick={() => { setAdding(k); setEditing(null); }}>+ Add</button>}
+              </div>
+              {c[k].length === 0 && adding !== k ? <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>None yet.</div> : c[k].map((x) => editing === x.id ? (
+                <div key={x.id} style={{ borderTop: '1px solid var(--line-1)' }}><EntryForm kind={k} initial={x} onDone={() => setEditing(null)}/></div>
+              ) : (
                 <div key={x.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 0', borderTop: '1px solid var(--line-1)', fontSize: 13.5, color: 'var(--ink-1)' }}>
                   <FreshDot fact={x}/><span style={{ flex: 1 }}>{line(x)}</span>
+                  <button style={cpLink} onClick={() => { setEditing(x.id); setAdding(null); }}>Edit</button>
                   <button style={cpLink} onClick={() => { if (window.confirm('Remove this entry?')) L.remove(k, x.id); }}>Remove</button>
                 </div>
               ))}
+              {adding === k && <div style={{ borderTop: '1px solid var(--line-1)' }}><EntryForm kind={k} onDone={() => setAdding(null)}/></div>}
             </div>
           ))}
 
+          {tab === 'sources' && (
+            note ? (
+              <div style={{ ...cpBox, padding: '14px 16px', marginBottom: 12 }}>
+                <div className="eyebrow" style={{ marginBottom: 8 }}>Paste a note</div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 10 }}>A project write-up, performance review, bio or anything else about your career. Claude reads it like a resume and you review every change before it's added.</div>
+                <Field label="Name"><TextInput value={note.name} onChange={(v) => setNote({ ...note, name: v })} placeholder="e.g. 2025 performance review"/></Field>
+                <div style={{ marginTop: 10 }}><TextArea value={note.text} onChange={(v) => setNote({ ...note, text: v })} rows={8} placeholder="Paste the text here"/></div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <Btn variant="primary" size="s" disabled={!note.text.trim() || !!busy || !!proposal} onClick={() => {
+                    const name = (note.name.trim() || 'Note ' + new Date().toLocaleDateString('en-GB')).replace(/[\\/:*?"<>|]/g, '-');
+                    queueRef.current = { files: [new File([note.text], name + '.txt', { type: 'text/plain' })], total: 1, kind: 'bio' };
+                    setNote(null); readNext();
+                  }}>Read with Claude</Btn>
+                  <Btn variant="ghost" size="s" onClick={() => setNote(null)}>Cancel</Btn>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 12 }}><Btn variant="ghost" size="s" icon="plus" disabled={!!busy || !!proposal} onClick={() => setNote({ name: '', text: '' })}>Paste a note</Btn></div>
+            )
+          )}
           {tab === 'sources' && (
             <div style={{ ...cpBox, padding: '6px 16px' }}>
               {c.sources.length === 0 ? <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--ink-3)' }}>No sources yet.</div> : c.sources.map((s) => (

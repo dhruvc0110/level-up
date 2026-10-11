@@ -275,13 +275,14 @@ const GUIDE_CHAPTERS = [
         <><B>Review changes</B> shows everything it found, compared with your profile. <B>New</B> items are ticked; untick anything you don't want. <B>Known</B> items already exist and just gain this file as an extra source. <B>Similar</B> items look like an achievement you already have in different words. Claude checks them and suggests <B>Same achievement (merge)</B> or <B>Add as separate</B>; a merge keeps the new wording as an alternative. <B>Conflicts</B> (e.g. a different team size or job title): <B>Keep yours</B>, <B>Use this file's</B> or <B>Decide later</B>. Formatting differences (phone format, "UK" vs "United Kingdom", a month's difference in dates) aren't treated as conflicts, and each resume's own headline is kept as a version rather than a clash.</>,
         <>Click <B>Apply to my profile</B>. Nothing changes until you do.</>,
       ]}/>
+      <GTip><B>Adding by hand:</B> anything you add or edit yourself is marked "Added by you" and confirmed today. A later resume import matches it like any other fact, so you won't get duplicates.</GTip>
       <GTip><B>Your LinkedIn profile as a PDF:</B> on LinkedIn, open your profile → <B>More</B> (or <B>Resources</B>) → <B>Save to PDF</B>. Old .doc files can't be read: save them as .docx or PDF first.</GTip>
       <GH>What's in each tab</GH>
       <GList items={[
-        <><B>Experience</B>: roles newest first, each with its scope (P&L, budget, team, geography). Under each role: <B>outcomes</B> first, then work <B>in flight</B>, then <B>responsibilities</B>. Edit anything, change an item's kind, or add one by hand.</>,
-        <><B>Expertise & themes</B>: your capabilities, industries, business processes, platforms and market offerings (with your 1–5 ratings where your resume gives them), plus the themes your achievements show. Click a theme to see the evidence behind it.</>,
-        <><B>Education & boards</B>: degrees, board seats, publications and talks, certifications and awards.</>,
-        <><B>Sources</B>: every file you imported, with how many facts it contributed. The originals are kept in your Drive under <B>Level Up / Sources</B>.</>,
+        <><B>Experience</B>: roles newest first, each with its scope (P&L, budget, team, geography). Under each role: <B>outcomes</B> first, then work <B>in flight</B>, then <B>responsibilities</B>. Edit anything, change an item's kind, add an achievement under a role, or click <B>Add a role</B> for one no resume covers.</>,
+        <><B>Expertise & themes</B>: your capabilities, industries, business processes, platforms and market offerings (with your 1–5 ratings where your resume gives them), plus the themes your achievements show. Click a theme to see the evidence behind it. <B>+ Add expertise</B> adds one by hand; click any item to rename it or change its level. Themes and skills come from your achievements, so add them by editing an achievement.</>,
+        <><B>Education & boards</B>: degrees, board seats, publications and talks, certifications and awards. Each section has <B>+ Add</B>, and every entry has <B>Edit</B> and <B>Remove</B>.</>,
+        <><B>Sources</B>: every file you imported, with how many facts it contributed. The originals are kept in your Drive under <B>Level Up / Sources</B>. <B>Paste a note</B> takes text that isn't in a file (a project write-up, a performance review, a bio): Claude reads it like a resume and you review the changes as usual.</>,
         <><B>Needs review</B>: what to fix or confirm (below).</>,
       ]}/>
       <GShot src="career-themes.jpg" caption="Expertise & themes: click a theme to see the evidence behind it."/>
@@ -375,6 +376,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Career profile: add to every tab by hand: a role, expertise (and change its name or level), degrees, board seats, publications and certifications (with Edit on each), or paste a note for Claude to read. Each tab now opens at the top.',
           'Claude costs under your control: Settings \u2192 Claude models & usage lets you pick the model for each job (Haiku is about 20\u00d7 cheaper than Sonnet) and shows this month\u2019s spend per job. Level Up now also caches its instructions, so batches cost less.',
           'Career profile: import your resumes and LinkedIn profile into one knowledge base, review every change before it\u2019s applied, and see what needs refreshing.',
           'Career profile captures your expertise (capabilities, industries, processes, platforms, offerings, with your 1\u20135 ratings), separates outcomes from responsibilities, merges the same achievement written different ways (keeping every wording), and can check the whole profile for duplicates.',
