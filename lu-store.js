@@ -159,6 +159,11 @@
     });
     doc.settings = Object.assign({ gmailLabel: 'LevelUp' }, doc.settings || {});
     if (!doc.companies || typeof doc.companies !== 'object' || Array.isArray(doc.companies)) doc.companies = {};
+    if (!doc.career || typeof doc.career !== 'object') doc.career = {};
+    ['summaries', 'roles', 'achievements', 'education', 'boards', 'publications', 'credentials', 'sources', 'conflicts'].forEach((k) => {
+      if (!Array.isArray(doc.career[k])) doc.career[k] = [];
+    });
+    if (!doc.career.person || typeof doc.career.person !== 'object') doc.career.person = {};
     // A brief left "researching" by a closed tab should be retried.
     Object.keys(doc.companies).forEach((k) => { if (doc.companies[k].status === 'researching') doc.companies[k].status = 'error'; });
     return doc;
@@ -410,6 +415,34 @@
     },
     fileUrl() { return driveFileId ? `https://drive.google.com/file/d/${driveFileId}/view` : null; },
   };
+
+  // Folders inside the Level Up Drive folder (e.g. "Sources" for career files).
+  async function driveFolder(name, parentId) {
+    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false` + (parentId ? ` and '${parentId}' in parents` : ''));
+    const found = await gfetch(`${DRIVE}/files?q=${q}&spaces=drive&fields=files(id)`);
+    if (found.files && found.files[0]) return found.files[0].id;
+    const made = await gfetch(`${DRIVE}/files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ name, mimeType: 'application/vnd.google-apps.folder' }, parentId ? { parents: [parentId] } : {})),
+    });
+    return made.id;
+  }
+  // Uploads a file the user picked into Level Up/<subfolder>/ and returns { id, url }.
+  async function uploadToDriveFolder(file, subfolder) {
+    if (LOCAL_MODE) return { id: null, url: null };
+    const root = await driveFolder(CONFIG.folderName);
+    const folderId = subfolder ? await driveFolder(subfolder, root) : root;
+    const boundary = 'lu' + Math.random().toString(36).slice(2);
+    const meta = JSON.stringify({ name: file.name, parents: [folderId] });
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`,
+      file, `\r\n--${boundary}--`,
+    ]);
+    const f = await gfetch(`${UPLOAD}/files?uploadType=multipart&fields=id,webViewLink`, {
+      method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body,
+    });
+    return { id: f.id, url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` };
+  }
 
   const localStore = {
     async load() {
@@ -1284,6 +1317,13 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   }
 
   window.LU_NETWORK_FOR = networkFor;
+
+  // Narrow hooks for feature modules in separate files (e.g. career-store.js).
+  window.LU_CORE = {
+    doc: () => DOC, markDirty, flush, claude, extractJson, nowIso, pill,
+    uploadToDriveFolder, localMode: LOCAL_MODE,
+    models: { parse: CONFIG.parseModel, quick: CONFIG.testModel },
+  };
 
   // ── Theme (Settings → Appearance). Dark is the default. ─────────────────
   const THEMES = { dark: '#070707', light: '#F3F2EF', neutral: '#E3DED5' };

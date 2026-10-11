@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '10 Oct 2026';
+const GUIDE_UPDATED = '11 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -263,6 +263,41 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
+    id: 'career', title: 'Career profile', blurb: 'Your career knowledge base: the source for every resume and note',
+    body: () => <>
+      <GP>The Career profile holds every fact about your career in one place: roles, scope, achievements with their numbers, boards, education and certifications. Resumes and outreach notes will draw from it, so it's worth keeping accurate. It grows each time you add a source, and tells you what needs refreshing.</GP>
+      <GShot src="career.jpg" caption="Career profile: roles with scope, and each achievement with its numbers, themes, personas and sources."/>
+      <GH>Add a source (resume or LinkedIn)</GH>
+      <GSteps items={[
+        <>Open <B>Career profile</B> in the sidebar.</>,
+        <>Pick the type (<B>Resume</B>, <B>LinkedIn profile</B> or <B>Bio or other document</B>), then <B>Choose file</B> (PDF or Word .docx).</>,
+        <>Claude reads it, usually in under a minute.</>,
+        <><B>Review changes</B> shows everything it found, compared with your profile. <B>New</B> items are ticked; untick anything you don't want. <B>Known</B> items already exist and just gain this file as an extra source. <B>Similar</B> items look like an achievement you have in different words: choose <B>Same achievement (merge)</B> or <B>Add as separate</B>. <B>Conflicts</B> (e.g. a different team size): <B>Keep yours</B>, <B>Use this file's</B> or <B>Decide later</B>.</>,
+        <>Click <B>Apply to my profile</B>. Nothing changes until you do.</>,
+      ]}/>
+      <GTip><B>Your LinkedIn profile as a PDF:</B> on LinkedIn, open your profile → <B>More</B> (or <B>Resources</B>) → <B>Save to PDF</B>. Old .doc files can't be read: save them as .docx or PDF first.</GTip>
+      <GH>What's in each tab</GH>
+      <GList items={[
+        <><B>Experience</B>: roles newest first. Edit a role's title, dates and scope (P&L, budget, team, geography). Edit any achievement, or add one by hand under its role.</>,
+        <><B>Skills & themes</B>: how often your achievements show each theme and skill. Click one to see the achievements behind it.</>,
+        <><B>Education & boards</B>: degrees, board seats, publications and talks, certifications and awards.</>,
+        <><B>Sources</B>: every file you imported, with how many facts it contributed. The originals are kept in your Drive under <B>Level Up / Sources</B>.</>,
+        <><B>Needs review</B>: what to fix or confirm (below).</>,
+      ]}/>
+      <GShot src="career-themes.jpg" caption="Skills & themes: click a theme to see the evidence behind it."/>
+      <GH>Keeping it fresh</GH>
+      <GP>Each fact remembers when you last confirmed it (the small dot: green = recent, amber = over 12 months). <B>Needs review</B> lists:</GP>
+      <GList items={[
+        <><B>Conflicting values</B> you chose to decide later: <B>Keep yours</B> or <B>Use new</B>.</>,
+        <><B>No number yet</B>: senior readers look for scale; add a figure if you have one.</>,
+        <><B>Add the scope</B>: a role with no P&L, budget or team size.</>,
+        <><B>Not confirmed in 12 months</B>: click <B>Still true</B>, or edit it.</>,
+      ]}/>
+      <GShot src="career-review.jpg" caption="Needs review: conflicts, missing numbers or scope, and facts due for a check." width={760}/>
+      <GTip>Coming next: tailored resumes and outreach notes will draw on this profile, and any wording you improve there will be offered back into it, so the profile keeps getting better.</GTip>
+    </>,
+  },
+  {
     id: 'brand', title: 'Brand', blurb: 'Plan and track your LinkedIn presence',
     body: () => <>
       <GP>Brand helps you post consistently: a content calendar, a consistency score, the mix of formats, and the themes you write about.</GP>
@@ -313,6 +348,7 @@ const GUIDE_CHAPTERS = [
         ["The company profile looks wrong", <>Click <B>Refresh</B> on the profile. If it's a recruiter posting, it's skipped on purpose.</>],
         ["A job came from email, not LinkedIn", <>Rows with an email address come from Gmail (the LevelUp label). Reject them if they're not relevant.</>],
         ["Gmail sync says the label wasn't found", <>Create the Gmail label <B>LevelUp</B> (see <i>Gmail: labelling emails</i>).</>],
+        ["A resume won't import", <>Use PDF or Word <B>.docx</B> (old .doc files can't be read). Very long documents may need splitting.</>],
         ["I see an old version after an update", <>Press <K>Cmd</K> + <K>Shift</K> + <K>R</K> once.</>],
       ].map(([q, a], i) => (
         <div key={i} style={{ padding: '12px 0', borderTop: i ? '1px solid var(--line-1)' : 'none' }}>
@@ -326,6 +362,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['11 Oct 2026', [
+          'Career profile: import your resumes and LinkedIn profile into one knowledge base, review every change before it\u2019s applied, and see what needs refreshing.',
+        ]],
         ['10 Oct 2026', [
           'User guide (this page) added to the sidebar.',
           'Inbox fills in live during a LinkedIn sync, with a running count.',

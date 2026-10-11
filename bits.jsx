@@ -108,6 +108,13 @@ function Icon({ name, size = 16, stroke = 1.5, style }) {
       return <svg {...props}>
         <path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M5.6 18.4l4.2-4.2M14.2 9.8l4.2-4.2"/>
       </svg>;
+    case 'profile':
+      return <svg {...props}>
+        <rect x="3" y="4" width="18" height="16" rx="2"/>
+        <circle cx="9" cy="11" r="2.5"/>
+        <path d="M5.5 17c.6-1.9 2-3 3.5-3s2.9 1.1 3.5 3"/>
+        <path d="M15 9h3.5M15 12.5h3.5"/>
+      </svg>;
     case 'guide':
       return <svg {...props}>
         <path d="M3 5.5C3 4.7 3.7 4 4.5 4H9a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H4.5A1.5 1.5 0 0 1 3 16z"/>

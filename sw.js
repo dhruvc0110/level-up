@@ -6,9 +6,9 @@
 // All fetches skip the browser's HTTP cache (GitHub Pages sends max-age=600),
 // otherwise a new version can be filled with the previous version's files.
 
-const CACHE_NAME = 'levelup-gh-v17';
+const CACHE_NAME = 'levelup-gh-v18';
 const PRECACHE = [
-  './', 'index.html', 'manifest.json', 'icon.svg', 'icon-maskable.svg', 'lu-store.js', 'linkedin-bookmarklet.js',
+  './', 'index.html', 'manifest.json', 'icon.svg', 'icon-maskable.svg', 'lu-store.js', 'linkedin-bookmarklet.js', 'career-store.js', 'career.jsx',
   'app.jsx', 'bits.jsx', 'brand.jsx', 'curator.jsx', 'dashboard.jsx', 'detail.jsx', 'inbox.jsx',
   'modals.jsx', 'network.jsx', 'personas.jsx', 'pipeline.jsx', 'settings.jsx', 'guide.jsx', 'tweaks-panel.jsx',
 ];

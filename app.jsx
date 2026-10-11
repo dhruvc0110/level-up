@@ -200,6 +200,10 @@ function App() {
         {view === 'settings' && (
           <SettingsView/>
         )}
+        {view === 'career' && (
+          typeof CareerView === 'function' ? <CareerView/>
+            : <div style={{ padding: 40, color: 'var(--ink-2)' }}>The career profile didn't load. Refresh the page (Cmd+Shift+R).</div>
+        )}
         {view === 'guide' && (
           typeof GuideView === 'function' ? <GuideView/>
             : <div style={{ padding: 40, color: 'var(--ink-2)' }}>The guide didn't load. Refresh the page (Cmd+Shift+R).</div>
@@ -323,6 +327,8 @@ function Sidebar({ view, onView, onAdd, personaChip, personas }) {
           active={view === 'inbox'} onClick={() => onView('inbox')}/>
         <NavItem icon="personas" label="Personas"
           active={view === 'personas'} onClick={() => onView('personas')}/>
+        <NavItem icon="profile" label="Career profile"
+          active={view === 'career'} onClick={() => onView('career')}/>
         <NavItem icon="network" label="Network"
           active={view === 'network'} onClick={() => onView('network')}/>
         <NavItem icon="brand" label="Brand"
