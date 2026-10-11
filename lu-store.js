@@ -33,6 +33,61 @@
     calendarLookbackDays: 365,
   };
 
+  // Claude models Dhruv can pick per task (Settings → Claude models & usage).
+  // Prices are USD per million tokens (platform.claude.com/docs/en/about-claude/pricing,
+  // checked 2026-10-11): input, output, 5-minute cache write, cache read.
+  const MODELS = {
+    haiku:  { id: 'claude-haiku-5-5',  label: 'Haiku 5.5',  note: 'fastest, cheapest', price: { in: 0.10, out: 0.50, cw: 0.125, cr: 0.01 } },
+    sonnet: { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', note: 'balanced',          price: { in: 2,    out: 10,   cw: 2.50,  cr: 0.10 } },
+    opus:   { id: 'claude-opus-5-5',   label: 'Opus 5.5',   note: 'most capable',      price: { in: 4,    out: 20,   cw: 5,     cr: 0.20 } },
+  };
+  const WEB_SEARCH_USD = 0.01; // per search
+  // Each task Level Up sends to Claude. `typical` is a rough per-call size, used
+  // for the cost hint until real calls have been counted.
+  const TASKS = {
+    gmail:    { label: 'Reading Gmail emails',        def: 'sonnet', typical: { in: 1800,  out: 300 } },
+    linkedin: { label: 'Reading LinkedIn jobs',       def: 'sonnet', typical: { in: 3500,  out: 900 } },
+    company:  { label: 'Company profiles (web search)', def: 'sonnet', typical: { in: 20000, out: 900, searches: 3 } },
+    career:   { label: 'Reading resumes',             def: 'sonnet', typical: { in: 9000,  out: 7000 } },
+    dupes:    { label: 'Duplicate checks',            def: 'haiku',  typical: { in: 2500,  out: 800 } },
+    test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
+  };
+  function modelKeyFor(task) {
+    const pick = DOC && DOC.settings && DOC.settings.models && DOC.settings.models[task];
+    return MODELS[pick] ? pick : (TASKS[task] ? TASKS[task].def : 'sonnet');
+  }
+  function modelFor(task) { return MODELS[modelKeyFor(task)].id; }
+  function priceOf(modelId) {
+    const m = Object.values(MODELS).find((x) => x.id === modelId || (modelId || '').startsWith(x.id));
+    return m ? m.price : MODELS.sonnet.price;
+  }
+  function costOf(modelId, u) {
+    const p = priceOf(modelId);
+    return ((u.in || 0) * p.in + (u.out || 0) * p.out + (u.cw || 0) * p.cw + (u.cr || 0) * p.cr) / 1e6 + (u.searches || 0) * WEB_SEARCH_USD;
+  }
+  // Running totals per month and task, saved with the data so every device sees them.
+  function recordUsage(task, modelId, usage) {
+    if (!usage || !DOC) return;
+    const u = {
+      in: usage.input_tokens || 0, out: usage.output_tokens || 0,
+      cw: usage.cache_creation_input_tokens || 0, cr: usage.cache_read_input_tokens || 0,
+      searches: (usage.server_tool_use && usage.server_tool_use.web_search_requests) || 0,
+    };
+    const p = priceOf(modelId);
+    const cost = costOf(modelId, u);
+    // What the same call would have cost with no caching at all.
+    const saved = ((u.cw + u.cr) * p.in - u.cw * p.cw - u.cr * p.cr) / 1e6;
+    const month = nowIso().slice(0, 7);
+    DOC.usage = DOC.usage || {};
+    const m = DOC.usage[month] = DOC.usage[month] || {};
+    const t = m[task || 'other'] = m[task || 'other'] || { calls: 0, in: 0, out: 0, cw: 0, cr: 0, searches: 0, cost: 0, saved: 0, models: {} };
+    t.calls++; t.in += u.in; t.out += u.out; t.cw += u.cw; t.cr += u.cr; t.searches += u.searches;
+    t.cost += cost; t.saved += saved;
+    t.models[modelId] = (t.models[modelId] || 0) + 1;
+    markDirty();
+    window.dispatchEvent(new CustomEvent('lu:usage-changed'));
+  }
+
   const params = new URLSearchParams(window.location.search);
   const LOCAL_MODE = params.get('local') === '1';
 
@@ -499,9 +554,16 @@
   // ════════════════════════════════════════════════════════════════════════
   // Claude (direct from browser)
   // ════════════════════════════════════════════════════════════════════════
-  async function claude(model, system, user, maxTokens, extra) {
+  // `task` (gmail, linkedin, company, career, dupes, test) is only for the usage meter.
+  // The instructions (system prompt) are marked for caching: when the same task runs
+  // again within 5 minutes (a Gmail sync, a LinkedIn batch, a resume import) Claude
+  // re-reads them at 5% of the price. Instructions under ~512 tokens aren't cached
+  // and cost nothing extra.
+  async function claude(model, system, user, maxTokens, extra, task) {
     const key = DOC.settings.anthropicApiKey;
     if (!key) throw new Error('No Claude API key set. Add it in Settings.');
+    // Not with server tools (web search): there the cache write cost more than it saved.
+    if (typeof system === 'string' && system && !(extra && extra.tools)) system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
     // Claude can briefly answer "busy" (429/5xx/529) when several jobs go in a
     // row; wait and try again (2s, then 6s) before giving up.
     const RETRY = [429, 500, 502, 503, 504, 529];
@@ -523,7 +585,7 @@
         if (attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
         throw new Error('Could not reach Claude (' + (e.message || e) + ')');
       }
-      if (r.ok) return j;
+      if (r.ok) { try { recordUsage(task, j.model || model, j.usage); } catch (e) { /* the meter must never break a call */ } return j; }
       if (RETRY.includes(r.status) && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
       throw new Error((j.error && j.error.message) || ('Claude error ' + r.status));
     }
@@ -569,10 +631,17 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
     return JSON.parse(t);
   }
 
+  // The answer is the last text block: some models (Haiku 5.5) put a thinking
+  // block first, and web search adds tool blocks.
+  function replyText(resp) {
+    const texts = ((resp && resp.content) || []).filter((b) => b.type === 'text');
+    return texts.length ? texts[texts.length - 1].text || '' : '';
+  }
+
   async function parseEmail(from, subject, body) {
     const msg = `From: ${from}\nSubject: ${subject}\n\n${(body || '').slice(0, 5000)}`;
-    const resp = await claude(CONFIG.parseModel, PARSING_SYSTEM_PROMPT, msg, 800);
-    const text = resp.content && resp.content[0] ? resp.content[0].text : '{}';
+    const resp = await claude(modelFor('gmail'), PARSING_SYSTEM_PROMPT, msg, 1500, null, 'gmail');
+    const text = replyText(resp) || '{}';
     try { return extractJson(text); }
     catch (e) { return { is_opportunity: false, confidence: 1, reasoning: 'Claude response did not parse as JSON.', _raw: text.slice(0, 500) }; }
   }
@@ -731,8 +800,8 @@ company_size and industry come from what you know about the company; use null if
       DOC.triage.unshift(row);
       added++;
       try {
-        const resp = await claude(CONFIG.parseModel, LINKEDIN_SYSTEM_PROMPT, `${text}\n\nLink: ${jobUrl}`, 600);
-        row.parsed = extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+        const resp = await claude(modelFor('linkedin'), LINKEDIN_SYSTEM_PROMPT, `${text}\n\nLink: ${jobUrl}`, 1200, null, 'linkedin');
+        row.parsed = extractJson(replyText(resp) || '{}');
         const d = row.parsed;
         // Card-only: what Claude can add without the job page. Marked partial.
         row.enrichment = {
@@ -818,8 +887,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     const text = String(job.text || '').slice(0, 9000);
     const jobUrl = `https://www.linkedin.com/jobs/view/${jobId}/`;
     const peopleBlock = people.length ? people.map((p) => `- ${p.url} :: ${p.text.replace(/\n/g, ' | ')}`).join('\n') : '(none)';
-    const ask = () => claude(CONFIG.parseModel, LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 2000);
-    const answer = (resp) => extractJson(resp.content && resp.content[0] ? resp.content[0].text : '{}');
+    const ask = () => claude(modelFor('linkedin'), LINKEDIN_DETAIL_PROMPT, `PAGE TEXT:\n${text}\n\nLINKED PROFILES:\n${peopleBlock}`, 4000, null, 'linkedin');
+    const answer = (resp) => extractJson(replyText(resp) || '{}');
     let d;
     try { d = answer(await ask()); }
     catch (e) { if (!(e instanceof SyntaxError)) throw e; d = answer(await ask()); } // unreadable reply: ask once more
@@ -971,8 +1040,8 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     window.dispatchEvent(new CustomEvent('lu:companies-changed'));
     try {
       const user = `Company: ${name}\n${context || ''}${force ? '\nThe user asked for this research explicitly: do not skip.' : ''}`;
-      const resp = await claude(CONFIG.parseModel, COMPANY_BRIEF_PROMPT, user, 1500,
-        { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] });
+      const resp = await claude(modelFor('company'), COMPANY_BRIEF_PROMPT, user, 3000,
+        { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }, 'company');
       const texts = (resp.content || []).filter((b) => b.type === 'text');
       const d = extractJson(texts.length ? texts[texts.length - 1].text : '{}');
       DOC.companies[key] = d.skip && !force
@@ -1288,8 +1357,8 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     }
     if (p === 'settings/anthropic_api_key/test' && method === 'POST') {
       try {
-        const r = await claude(CONFIG.testModel, null, 'Reply with exactly: ok', 20);
-        return { ok: true, model: r.model, response: ((r.content && r.content[0] && r.content[0].text) || '').trim(), inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens };
+        const r = await claude(CONFIG.testModel, null, 'Reply with exactly: ok', 20, null, 'test');
+        return { ok: true, model: r.model, response: replyText(r).trim(), inputTokens: r.usage.input_tokens, outputTokens: r.usage.output_tokens };
       } catch (e) { return { ok: false, error: String(e.message || e).slice(0, 300) }; }
     }
 
@@ -1321,7 +1390,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   // Narrow hooks for feature modules in separate files (e.g. career-store.js).
   window.LU_CORE = {
     doc: () => DOC, markDirty, flush, claude, extractJson, nowIso, pill,
-    uploadToDriveFolder, localMode: LOCAL_MODE,
+    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor,
     models: { parse: CONFIG.parseModel, quick: CONFIG.testModel },
   };
 
@@ -1378,6 +1447,28 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     researchMissing,
     getTheme() { return THEMES[DOC.settings.theme] ? DOC.settings.theme : 'dark'; },
     setTheme(t) { DOC.settings.theme = applyTheme(t); markDirty(); },
+    // Settings → Claude models & usage
+    claudeModels() {
+      return {
+        models: Object.entries(MODELS).map(([k, m]) => ({ key: k, id: m.id, label: m.label, note: m.note })),
+        tasks: Object.entries(TASKS).filter(([, t]) => !t.hidden).map(([k, t]) => ({ key: k, label: t.label, model: modelKeyFor(k), def: t.def })),
+      };
+    },
+    setTaskModel(task, key) {
+      if (!TASKS[task] || !MODELS[key]) return;
+      DOC.settings.models = Object.assign({}, DOC.settings.models || {}, { [task]: key });
+      markDirty();
+    },
+    // Rough cost of one call for a task on a model: from this month's real
+    // average size when there is one, else the typical size.
+    estimateCost(task, key) {
+      const m = (DOC.usage || {})[nowIso().slice(0, 7)] || {};
+      const t = m[task];
+      const typ = TASKS[task] ? TASKS[task].typical : { in: 2000, out: 500 };
+      const per = t && t.calls ? { in: (t.in + t.cw + t.cr) / t.calls, out: t.out / t.calls, searches: t.searches / t.calls } : typ;
+      return costOf(MODELS[key].id, per);
+    },
+    usage() { return JSON.parse(JSON.stringify(DOC.usage || {})); },
     async reload() { await flush(); window.location.reload(); },
     signOut,
   };

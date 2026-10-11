@@ -312,13 +312,22 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
-    id: 'settings', title: 'Settings', blurb: 'Theme, Claude key, Google, LinkedIn, backups',
+    id: 'settings', title: 'Settings', blurb: 'Theme, Claude key and costs, Google, LinkedIn, backups',
     body: () => <>
       <GH>Appearance</GH>
       <GP>Choose <B>Dark</B> (default), <B>Light</B> or <B>Neutral</B>. It's saved with your data, so every device follows.</GP>
       <GShot src="settings-appearance.jpg" caption="Settings → Appearance." width={720}/>
       <GH>Claude API key</GH>
       <GP>Level Up uses Claude to read emails and jobs and to research companies. Create a key at <B>console.anthropic.com → API keys</B>, paste it into <B>Settings → Claude API key</B>, click <B>Save key</B>, then <B>Test connection</B>. It's stored in your own Drive file and used only from your browser.</GP>
+      <GH>Claude models & usage (cost)</GH>
+      <GShot src="settings-claude-usage.jpg" caption="Settings → Claude models & usage: this month's spend and a model per job." width={720}/>
+      <GList items={[
+        <><B>Pick a model per job</B>: Gmail emails, LinkedIn jobs, company profiles, resumes, duplicate checks. <B>Haiku</B> is about 20× cheaper than <B>Sonnet</B>; <B>Opus</B> is the most capable and costs twice Sonnet.</>,
+        <>Each option shows a rough cost per item, based on your real usage once there is some.</>,
+        <><B>Try before you commit</B>: switch one job to Haiku, check the next few results (e.g. a LinkedIn job's fit and hiring manager), and switch back if they're not good enough.</>,
+        <>The cards show this month's spend, last month, and what <B>caching</B> saved. Caching re-uses Level Up's instructions within 5 minutes, so it pays off in batches (a Gmail sync, a LinkedIn page, a resume import).</>,
+        <>For a hard ceiling, set a monthly limit at <B>console.anthropic.com → Settings → Limits</B>.</>,
+      ]}/>
       <GH>Google</GH>
       <GShot src="settings-google.jpg" caption="Settings → Google: sync, open the data file, back up and restore." width={720}/>
       <GList items={[
@@ -351,6 +360,7 @@ const GUIDE_CHAPTERS = [
         ["A job came from email, not LinkedIn", <>Rows with an email address come from Gmail (the LevelUp label). Reject them if they're not relevant.</>],
         ["Gmail sync says the label wasn't found", <>Create the Gmail label <B>LevelUp</B> (see <i>Gmail: labelling emails</i>).</>],
         ["A resume won't import", <>Use PDF or Word <B>.docx</B> (old .doc files can't be read). Very long documents may need splitting.</>],
+        ["Claude costs more than expected", <>Open <B>Settings → Claude models & usage</B> to see which job spends the most, then switch it to <B>Haiku</B>. Company profiles also pay 1¢ per web search.</>],
         ["I see an old version after an update", <>Press <K>Cmd</K> + <K>Shift</K> + <K>R</K> once.</>],
       ].map(([q, a], i) => (
         <div key={i} style={{ padding: '12px 0', borderTop: i ? '1px solid var(--line-1)' : 'none' }}>
@@ -365,6 +375,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Claude costs under your control: Settings \u2192 Claude models & usage lets you pick the model for each job (Haiku is about 20\u00d7 cheaper than Sonnet) and shows this month\u2019s spend per job. Level Up now also caches its instructions, so batches cost less.',
           'Career profile: import your resumes and LinkedIn profile into one knowledge base, review every change before it\u2019s applied, and see what needs refreshing.',
           'Career profile captures your expertise (capabilities, industries, processes, platforms, offerings, with your 1\u20135 ratings), separates outcomes from responsibilities, merges the same achievement written different ways (keeping every wording), and can check the whole profile for duplicates.',
         ]],

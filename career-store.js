@@ -150,13 +150,16 @@ Output a SINGLE JSON object, no prose around it:
 }`;
   }
 
+  // Model per task comes from Settings; older cached copies of lu-store lack modelFor.
+  const pick = (task, fallback) => (core().modelFor ? core().modelFor(task) : fallback);
+
   async function extract(file, kind) {
     const read = await readFile(file);
     const content = read.pdf
       ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: read.pdf } }, { type: 'text', text: 'Extract the career facts from this document.' }]
       : [{ type: 'text', text: 'DOCUMENT TEXT:\n' + String(read.text || '').slice(0, 60000) + '\n\nExtract the career facts from this document.' }];
     if (!read.pdf && !String(read.text || '').trim()) throw new Error('That file has no readable text.');
-    const resp = await core().claude(core().models.parse, extractPrompt(kind), content, 16000);
+    const resp = await core().claude(pick('career', core().models.parse), extractPrompt(kind), content, 16000, null, 'career');
     const texts = (resp.content || []).filter((b) => b.type === 'text');
     const raw = texts.length ? texts[texts.length - 1].text : '{}';
     try { return core().extractJson(raw); }
@@ -379,7 +382,7 @@ Output a SINGLE JSON object, no prose around it:
   async function askSame(existing, incoming) {
     const list = 'EXISTING:\n' + existing.map((e) => `${e.id}: ${e.text}`).join('\n') + '\n\nNEW:\n' + incoming.map((t, i) => `${i}: ${t}`).join('\n')
       + '\n\nFor each NEW item that is the same as an EXISTING one, give the pair. Format: {"same": [{"new": 0, "existing": "<id>"}]}';
-    const resp = await core().claude(core().models.quick, DUP_PROMPT, list, 8000);
+    const resp = await core().claude(pick('dupes', core().models.quick), DUP_PROMPT, list, 8000, null, 'dupes');
     const texts = (resp.content || []).filter((b) => b.type === 'text');
     const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
     return Array.isArray(d.same) ? d.same : [];
@@ -431,8 +434,8 @@ Output a SINGLE JSON object, no prose around it:
       const list = c.achievements.filter((a) => a.roleId === r.id);
       if (onProgress) onProgress(++done, roles.length);
       try {
-        const resp = await core().claude(core().models.quick, DUP_PROMPT,
-          'ACHIEVEMENTS:\n' + list.map((a) => `${a.id}: ${a.text}`).join('\n') + '\n\nGroup the ones that are the same accomplishment. Only groups of 2 or more. Format: {"groups": [["<id>", "<id>"]]}', 8000);
+        const resp = await core().claude(pick('dupes', core().models.quick), DUP_PROMPT,
+          'ACHIEVEMENTS:\n' + list.map((a) => `${a.id}: ${a.text}`).join('\n') + '\n\nGroup the ones that are the same accomplishment. Only groups of 2 or more. Format: {"groups": [["<id>", "<id>"]]}', 8000, null, 'dupes');
         const texts = (resp.content || []).filter((b) => b.type === 'text');
         const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
         (Array.isArray(d.groups) ? d.groups : []).forEach((g) => {
@@ -448,9 +451,9 @@ Output a SINGLE JSON object, no prose around it:
     for (const [type, list] of Object.entries(byType)) {
       if (list.length < 2) continue;
       try {
-        const resp = await core().claude(core().models.quick,
+        const resp = await core().claude(pick('dupes', core().models.quick),
           'You tidy a list of an executive\'s ' + type + ' entries. Group entries that mean the same thing: synonyms, abbreviations, spelling variants or typos, or one being a slightly longer name for the other (e.g. "GPT-4o" and "OpenAI GPT-4o"; "Signavio" and "SAP Signavio"). Do NOT group items that are genuinely different (e.g. "Retail" and "Consumer Goods" are different industries). Output a single JSON object and nothing else.',
-          'ENTRIES:\n' + list.map((x) => `${x.id}: ${x.name}`).join('\n') + '\n\nFormat: {"groups": [["<id>", "<id>"]]}', 6000);
+          'ENTRIES:\n' + list.map((x) => `${x.id}: ${x.name}`).join('\n') + '\n\nFormat: {"groups": [["<id>", "<id>"]]}', 6000, null, 'dupes');
         const texts = (resp.content || []).filter((b) => b.type === 'text');
         const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '{}');
         (Array.isArray(d.groups) ? d.groups : []).forEach((g) => {

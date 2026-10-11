@@ -12,6 +12,7 @@ function SettingsView() {
         <div style={{ maxWidth: 760 }}>
           <AppearancePanel/>
           <AnthropicKeyPanel/>
+          <ClaudeUsagePanel/>
           <GmailPanel/>
           <LinkedInJobsPanel/>
           <LinkedInPanel/>
@@ -116,6 +117,89 @@ function AppearancePanel() {
           );
         })}
       </div>
+    </SettingsPanel>
+  );
+}
+
+// ── Claude models & usage ───────────────────────────────────────────────
+
+function fmtUsd(v) {
+  if (!v) return '$0';
+  if (v < 0.995) { const c = v * 100; return (c < 1 ? c.toFixed(2) : c < 10 ? c.toFixed(1) : Math.round(c)) + '¢'; }
+  return '$' + v.toFixed(2);
+}
+
+function ClaudeUsagePanel() {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const on = () => setTick((n) => n + 1);
+    window.addEventListener('lu:usage-changed', on);
+    return () => window.removeEventListener('lu:usage-changed', on);
+  }, []);
+  if (typeof LU_API.claudeModels !== 'function') {
+    return (
+      <SettingsPanel title="Claude models & usage" eyebrow="AI · COST">
+        <p style={{ color: 'var(--ink-2)', fontSize: 14, margin: 0 }}>Refresh the page (Cmd+Shift+R) to load this panel.</p>
+      </SettingsPanel>
+    );
+  }
+  const { models, tasks } = LU_API.claudeModels();
+  const usage = LU_API.usage();
+  const month = new Date().toISOString().slice(0, 7);
+  const prev = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
+  const sum = (m, k) => Object.values(m || {}).reduce((s, t) => s + (t[k] || 0), 0);
+  const cur = usage[month] || {};
+  const choose = (task, key) => { LU_API.setTaskModel(task, key); setTick((n) => n + 1); };
+  const monthName = (ym) => new Date(ym + '-15').toLocaleString(undefined, { month: 'long' });
+  const note = { fontSize: 12, color: 'var(--ink-3)' };
+
+  return (
+    <SettingsPanel title="Claude models & usage" eyebrow="AI · COST">
+      <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>
+        Choose which Claude model does each job. Cheaper models cost far less; switch one, check the results it gives you, and switch back if they're not good enough. The cost next to each model is a rough figure for one item.
+      </p>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
+        {[
+          ['This month (' + monthName(month) + ')', fmtUsd(sum(cur, 'cost')), sum(cur, 'calls') + ' calls'],
+          sum(cur, 'saved') >= 0
+            ? ['Saved by caching', fmtUsd(sum(cur, 'saved')), 'this month']
+            : ['Caching', '+' + fmtUsd(-sum(cur, 'saved')), 'extra so far: pays off in batches'],
+          ['Last month', usage[prev] ? fmtUsd(sum(usage[prev], 'cost')) : '—', usage[prev] ? sum(usage[prev], 'calls') + ' calls' : 'not counted'],
+        ].map(([label, value, sub]) => (
+          <div key={label} style={{ flex: '1 1 150px', padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 4 }}>
+            <div className="eyebrow" style={{ marginBottom: 4 }}>{label}</div>
+            <div className="mono" style={{ fontSize: 18, color: 'var(--ink-1)' }}>{value}</div>
+            <div style={note}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        {tasks.map((t) => {
+          const u = cur[t.key];
+          return (
+            <div key={t.key} className="hl-b" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px', padding: '10px 0' }}>
+              <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--ink-1)' }}>{t.label}</div>
+                <div style={note}>{u ? `${u.calls} call${u.calls === 1 ? '' : 's'} · ${fmtUsd(u.cost)} this month` : 'Not used yet this month'}</div>
+              </div>
+              <select aria-label={'Model for ' + t.label} value={t.model} onChange={(e) => choose(t.key, e.target.value)}
+                style={{ flex: '0 1 250px', maxWidth: '100%', fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '5px 6px' }}>
+                {models.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label} · ≈{fmtUsd(LU_API.estimateCost(t.key, m.key))} each{m.key === t.def ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+
+      <p style={{ ...note, lineHeight: 1.6, margin: '14px 0 0' }}>
+        Counting started when this panel was added, so earlier spend isn't included. Company profiles also pay 1¢ per web search. For a hard ceiling, set a monthly limit in the Anthropic Console under Settings → Limits.
+      </p>
     </SettingsPanel>
   );
 }
