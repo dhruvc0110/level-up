@@ -200,6 +200,10 @@ function App() {
         {view === 'settings' && (
           <SettingsView/>
         )}
+        {view === 'guide' && (
+          typeof GuideView === 'function' ? <GuideView/>
+            : <div style={{ padding: 40, color: 'var(--ink-2)' }}>The guide didn't load. Refresh the page (Cmd+Shift+R).</div>
+        )}
       </div>
 
       {openOpp && (
@@ -326,6 +330,8 @@ function Sidebar({ view, onView, onAdd, personaChip, personas }) {
         <div style={{ height: 1, background: 'var(--line-1)', margin: '8px 10px' }}/>
         <NavItem icon="settings" label="Settings"
           active={view === 'settings'} onClick={() => onView('settings')}/>
+        <NavItem icon="guide" label="Guide"
+          active={view === 'guide'} onClick={() => onView('guide')}/>
       </nav>
 
       {/* Persona context chip (optional via Tweak) */}
