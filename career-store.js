@@ -526,7 +526,8 @@ Output a SINGLE JSON object, no prose around it:
   const PERSONA_FIELDS = ['name', 'positioning', 'skills', 'companySize', 'targetSectors'];
   const personaDef = (p) => JSON.stringify(PERSONA_FIELDS.map((k) => p && p[k] || null));
   const RELINK_PROMPT = 'You decide which parts of a senior executive\'s career record are genuine evidence for one target persona (a kind of role they are pursuing). Include an item only if a hiring panel for that persona would see it as relevant proof: matching responsibilities, results, industries, capabilities or platforms. Be selective; leave out generic items. Output a single JSON object and nothing else.';
-  async function relinkPersona(persona) {
+  async function relinkPersona(persona, opts) {
+    const expertiseOnly = !!(opts && opts.expertiseOnly);
     const c = C();
     if (!persona || !persona.id || persona.retired) return null;
     if (!c.achievements.length && !(c.expertise || []).length) return { achievements: 0, expertise: 0 };
@@ -535,9 +536,9 @@ Output a SINGLE JSON object, no prose around it:
     const def = [`Persona: ${persona.code || ''} ${persona.name}`, persona.positioning && `Positioning: ${persona.positioning}`,
       (persona.skills || []).length && `Skills it needs: ${persona.skills.join(', ')}`, persona.companySize && `Company size: ${persona.companySize}`,
       (persona.targetSectors || []).length && `Target sectors: ${persona.targetSectors.join(', ')}`].filter(Boolean).join('\n');
-    const user = def + '\n\nACHIEVEMENTS:\n' + ach.map((a, i) => `A${i}: ${a.text} [${roleOf(a).title || ''}, ${roleOf(a).company || ''}]`).join('\n')
+    const user = def + (expertiseOnly ? '' : '\n\nACHIEVEMENTS:\n' + ach.map((a, i) => `A${i}: ${a.text} [${roleOf(a).title || ''}, ${roleOf(a).company || ''}]`).join('\n'))
       + '\n\nEXPERTISE:\n' + exp.map((x, i) => `E${i}: ${x.type}: ${x.name}`).join('\n')
-      + '\n\nList the evidence for this persona. Format: {"achievements": ["A0", ...], "expertise": ["E3", ...]}';
+      + (expertiseOnly ? '\n\nList the expertise that is evidence for this persona. Format: {"expertise": ["E3", ...]}' : '\n\nList the evidence for this persona. Format: {"achievements": ["A0", ...], "expertise": ["E3", ...]}');
     const model = core().modelFor ? core().modelFor('tagging') : core().models.quick;
     const resp = await core().claude(model, RELINK_PROMPT, user, 12000, null, 'tagging');
     const texts = (resp.content || []).filter((b) => b.type === 'text');
@@ -550,13 +551,116 @@ Output a SINGLE JSON object, no prose around it:
       const cur = (item.personas || []).filter((id) => id !== persona.id);
       item.personas = on ? [...cur, persona.id] : cur;
     };
-    ach.forEach((a, i) => set(a, A.has(i)));
+    if (!expertiseOnly) ach.forEach((a, i) => set(a, A.has(i)));
     exp.forEach((x, i) => set(x, E.has(i)));
     c.personaLinks = c.personaLinks || {};
-    c.personaLinks[persona.id] = { def: personaDef(persona), at: now(), achievements: A.size, expertise: E.size };
+    const prevLink = c.personaLinks[persona.id] || {};
+    const nA = expertiseOnly ? ach.filter((a) => (a.personas || []).includes(persona.id)).length : A.size;
+    c.personaLinks[persona.id] = { def: personaDef(persona), at: now(), achievements: nA, expertise: E.size, expertiseAt: now(), reviewedAchievements: expertiseOnly ? !!prevLink.reviewedAchievements : true };
     core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
-    return { achievements: A.size, expertise: E.size };
+    return { achievements: nA, expertise: E.size };
   }
+  // Expertise has no role, so it joins the map through themes (and personas).
+  // One pass assigns each item up to three of the themes your achievements show,
+  // then each active persona gets its expertise linked (achievement tags untouched).
+  async function linkExpertise(onProgress) {
+    const c = C(), exp = c.expertise || [];
+    if (!exp.length) return { themed: 0, personas: 0 };
+    const themes = graph().themes.map((t) => t.name);
+    const model = core().modelFor ? core().modelFor('tagging') : core().models.quick;
+    if (onProgress) onProgress('Matching expertise to themes…');
+    const user = 'THEMES:\n' + themes.join('\n') + '\n\nEXPERTISE:\n' + exp.map((x, i) => `E${i}: ${x.type}: ${x.name}`).join('\n')
+      + '\n\nFor each expertise item, give up to 3 of the THEMES above that it genuinely supports (use the theme text exactly). Leave out items that fit none. Format: {"E0": ["theme", ...], ...}';
+    const resp = await core().claude(model, 'You connect an executive\'s skills and expertise to the themes of their career achievements. Only use themes from the list. Output a single JSON object and nothing else.', user, 12000, null, 'tagging');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    let d;
+    try { d = core().extractJson(texts.length ? texts[texts.length - 1].text : ''); }
+    catch (e) { throw new Error(resp.stop_reason === 'max_tokens' ? 'The answer was cut off. Try again.' : 'Claude’s reply could not be read. Try again.'); }
+    const known = new Set(themes);
+    let themed = 0;
+    exp.forEach((x, i) => {
+      const list = (Array.isArray(d['E' + i]) ? d['E' + i] : []).map((t) => String(t).toLowerCase().trim()).filter((t) => known.has(t)).slice(0, 3);
+      x.themes = list; if (list.length) themed++;
+    });
+    c.expertiseLinkedAt = now();
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+    const personas = (core().doc().personas || []).filter((p) => !p.retired);
+    let n = 0;
+    for (const p of personas) {
+      if (onProgress) onProgress(`Linking expertise to ${p.code || ''} ${p.name}… (${++n} of ${personas.length})`);
+      try { await relinkPersona(p, { expertiseOnly: true }); } catch (e) { /* carry on; the persona shows as not linked */ }
+    }
+    return { themed, personas: personas.length };
+  }
+
+  // ── Persona lens: how strong is the case for this persona, and what's missing ──
+  // One Claude read of the proof linked to the persona, measured against its
+  // definition. Saved per persona; marked out of date when the persona or the
+  // profile changes, and only re-run when you ask.
+  const LENS_PROMPT = `You assess how strong a senior executive's documented track record is for one target persona (a kind of role they are pursuing), as a demanding executive search partner would. Use ONLY the record provided: never assume experience that isn't there. Where something is missing from the record, say so plainly; the person may have it but not have recorded it.
+
+Output a single JSON object and nothing else:
+{
+  "strength": 1-5,
+  "label": "Early" | "Developing" | "Moderate" | "Strong" | "Compelling",
+  "verdict": "one or two sentences: the case for this persona and the main thing holding it back",
+  "best": ["A3", "A0"],
+  "requirements": [ { "item": "a skill, sector or company-size requirement from the persona", "status": "covered" | "partial" | "gap", "evidence": ["A3", "E2"], "note": "short reason" } ],
+  "gaps": [ { "gap": "what's missing", "why": "why a hiring panel for this persona cares", "fix": "a concrete next step: add a number to A4, record X, or build Y" } ]
+}
+Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer to an achievement by a few of its own words in quotes. "best" is up to 6 achievements that make the strongest case, strongest first (prefer outcomes with numbers, recent roles, scale). "requirements" covers every skill, target sector and the company size listed for the persona. "gaps" has at most 5 items, most important first, and includes things senior panels for this persona expect even if not listed (e.g. P&L ownership, board exposure), if the record lacks them.`;
+  function profileSig() {
+    const c = C();
+    const parts = [c.achievements.length, (c.expertise || []).length, c.roles.length, (c.boards || []).length, (c.credentials || []).length];
+    const latest = [c.achievements, c.expertise || [], c.roles, c.education || [], c.boards || []].flat().reduce((m, x) => (x.updatedAt && x.updatedAt > m ? x.updatedAt : m), '');
+    return parts.join('.') + '|' + latest;
+  }
+  async function assessPersona(persona) {
+    const c = C();
+    const roleOf = (a) => c.roles.find((r) => r.id === a.roleId) || {};
+    const ach = c.achievements.filter((a) => (a.personas || []).includes(persona.id));
+    const exp = (c.expertise || []).filter((x) => (x.personas || []).includes(persona.id));
+    const def = [`Persona: ${persona.code || ''} ${persona.name}`, persona.positioning && `Positioning: ${persona.positioning}`,
+      (persona.skills || []).length && `Skills it needs: ${persona.skills.join(', ')}`, persona.companySize && `Company size: ${persona.companySize}`,
+      (persona.targetSectors || []).length && `Target sectors: ${persona.targetSectors.join(', ')}`].filter(Boolean).join('\n');
+    const roles = c.roles.map((r) => `- ${r.title}, ${r.company} (${r.start || '?'} to ${r.end || '?'})${r.scope && Object.values(r.scope).some(Boolean) ? ' scope: ' + Object.entries(r.scope).filter((e) => e[1]).map((e) => e[0] + ' ' + e[1]).join('; ') : ''}`).join('\n');
+    const list = (k, f) => (c[k] || []).length ? (c[k] || []).map(f).join('\n') : '(none)';
+    const user = def
+      + '\n\nCAREER (all roles):\n' + roles
+      + '\n\nACHIEVEMENTS LINKED TO THIS PERSONA:\n' + (ach.length ? ach.map((a, i) => `A${i}: [${a.kind || 'outcome'}] ${a.text}${(a.metrics || []).length ? ' | numbers: ' + a.metrics.map((m) => m.value).join(', ') : ''} | ${roleOf(a).title || ''}, ${roleOf(a).company || ''}, ${roleOf(a).start || ''}–${roleOf(a).end || ''}`).join('\n') : '(none)')
+      + '\n\nEXPERTISE LINKED TO THIS PERSONA:\n' + (exp.length ? exp.map((x, i) => `E${i}: ${x.type}: ${x.name}${x.level ? ' (self-rated ' + x.level + '/5)' : ''}`).join('\n') : '(none)')
+      + '\n\nBOARDS:\n' + list('boards', (b) => `- ${b.role || ''} ${b.org}`)
+      + '\nEDUCATION:\n' + list('education', (e) => `- ${[e.degree, e.field, e.school, e.year].filter(Boolean).join(', ')}`)
+      + '\nCERTIFICATIONS AND AWARDS:\n' + list('credentials', (x) => `- ${x.name}`)
+      + '\nPUBLICATIONS AND TALKS:\n' + list('publications', (x) => `- ${x.title}`);
+    const model = core().modelFor ? core().modelFor('lens') : core().models.parse;
+    const resp = await core().claude(model, LENS_PROMPT, user, 8000, null, 'lens');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    let d;
+    try { d = core().extractJson(texts.length ? texts[texts.length - 1].text : ''); }
+    catch (e) { throw new Error(resp.stop_reason === 'max_tokens' ? 'The answer was cut off. Try again.' : 'Claude’s reply could not be read. Try again.'); }
+    // Codes like "A54" mean nothing to the reader: swap any that slip through for the item's opening words.
+    const words = (t) => '“' + String(t || '').split(/\s+/).slice(0, 6).join(' ') + '…”';
+    const plain = (t) => String(t || '').replace(/\b([AE])(\d+)\b/g, (m, k, n) => { const x = k === 'A' ? ach[+n] : exp[+n]; return x ? words(x.text || x.name) : m; });
+    const mapIds = (ids) => (Array.isArray(ids) ? ids : []).map((s) => String(s).trim()).map((s) => (s[0] === 'A' ? ach[+s.slice(1)] && { kind: 'achievement', id: ach[+s.slice(1)].id } : s[0] === 'E' ? exp[+s.slice(1)] && { kind: 'expertise', id: exp[+s.slice(1)].id } : null)).filter(Boolean);
+    const result = {
+      strength: Math.max(1, Math.min(5, Math.round(+d.strength || 1))),
+      label: String(d.label || ''), verdict: plain(d.verdict),
+      best: mapIds(d.best).filter((x) => x.kind === 'achievement').map((x) => x.id).slice(0, 6),
+      requirements: (Array.isArray(d.requirements) ? d.requirements : []).map((r) => ({ item: String(r.item || ''), status: ['covered', 'partial', 'gap'].includes(r.status) ? r.status : 'gap', evidence: mapIds(r.evidence), note: plain(r.note) })).filter((r) => r.item),
+      gaps: (Array.isArray(d.gaps) ? d.gaps : []).slice(0, 5).map((g) => ({ gap: plain(g.gap), why: plain(g.why), fix: plain(g.fix) })).filter((g) => g.gap),
+    };
+    c.personaLens = c.personaLens || {};
+    c.personaLens[persona.id] = { def: personaDef(persona), sig: profileSig(), at: now(), model: resp.model || model, result };
+    core().markDirty(); window.dispatchEvent(new CustomEvent('lu:career-changed'));
+    return result;
+  }
+  function lensFor(persona) {
+    const l = (C().personaLens || {})[persona.id];
+    if (!l) return null;
+    return Object.assign({}, l, { stale: l.def !== personaDef(persona) ? 'persona' : l.sig !== profileSig() ? 'profile' : null });
+  }
+
   // Has this persona been linked with its current definition?
   function linkStatus(persona) {
     const l = (C().personaLinks || {})[persona.id];
@@ -647,7 +751,7 @@ Output a SINGLE JSON object, no prose around it:
     update, add, remove, confirm, setPerson, resolveConflict,
     reviewItems, isStale, graph, STALE_DAYS,
     findDuplicates, mergeDuplicates, keepSeparate, useVariant,
-    relinkPersona, linkStatus,
+    relinkPersona, linkStatus, linkExpertise, assessPersona, lensFor,
     data: () => C(),
     _test: { similarity, findRole, matchAchievement },
   };

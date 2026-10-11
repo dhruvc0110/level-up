@@ -2,6 +2,7 @@
 // Data + logic live in career-store.js (window.LU_CAREER).
 
 const CP_TABS = [
+  { id: 'map', label: 'Map' },
   { id: 'experience', label: 'Experience' },
   { id: 'themes', label: 'Expertise & themes' },
   { id: 'more', label: 'Education & boards' },
@@ -83,12 +84,14 @@ function EntryForm({ kind, initial, onDone }) {
     return o;
   });
   const ok = fields.every((f) => !f.req || String(d[f.k] || '').trim());
+  const [personas, setPersonas] = React.useState(() => (initial && initial.personas) || []);
   // Bring the form into view: on long lists it can open below the fold.
   const box = React.useRef(null);
   React.useEffect(() => { if (box.current && box.current.scrollIntoView) box.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, []);
   const save = () => {
     const data = {};
     fields.forEach((f) => { const v = String(d[f.k] || '').trim(); data[f.k] = f.k === 'level' ? (v ? +v : null) : (v || null); });
+    if (kind === 'expertise') data.personas = personas;
     if (initial && initial.id) L.update(kind, initial.id, data);
     else L.add(kind, kind === 'roles' ? Object.assign({ scope: {}, summary: null }, data) : data);
     onDone();
@@ -103,6 +106,12 @@ function EntryForm({ kind, initial, onDone }) {
           </Field>
         ))}
       </div>
+      {kind === 'expertise' && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Supports these personas</div>
+          <PersonaToggles value={personas} onChange={setPersonas}/>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <Btn variant="primary" size="s" onClick={save} disabled={!ok}>{initial && initial.id ? 'Save' : 'Add'}</Btn>
         <Btn variant="ghost" size="s" onClick={onDone}>Cancel</Btn>
@@ -401,7 +410,7 @@ function ExpertisePanel({ items, adding, setAdding, editing, setEditing }) {
 function CareerView() {
   useCareerTick();
   const L = window.LU_CAREER;
-  const [tab, setTab] = React.useState('experience');
+  const [tab, setTab] = React.useState(() => (window.LU_CAREER && window.LU_CAREER.data().roles.length ? 'map' : 'experience'));
   const [kind, setKind] = React.useState('resume');
   const [busy, setBusy] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -492,6 +501,9 @@ function CareerView() {
 
           {proposal && <ImportReview key={proposal.source.name + (proposal.position || '')} proposal={proposal} onApply={apply} onCancel={discard}/>}
 
+          {tab === 'map' && (typeof CareerMap === 'function'
+            ? <CareerMap onEditRoles={() => { setTab('experience'); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}/>
+            : <div style={{ ...cpBox, padding: 24, fontSize: 14, color: 'var(--ink-3)' }}>The map didn't load. Refresh the page (Cmd+Shift+R).</div>)}
           {tab === 'experience' && (
             adding === 'roles' ? (
               <div style={{ ...cpBox, padding: '6px 18px', marginBottom: 12 }}><EntryForm kind="roles" onDone={() => setAdding(null)}/></div>

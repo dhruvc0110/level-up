@@ -269,7 +269,25 @@ const GUIDE_CHAPTERS = [
     id: 'career', title: 'Career profile', blurb: 'Your career knowledge base: the source for every resume and note',
     body: () => <>
       <GP>The Career profile holds every fact about your career in one place: roles, scope, achievements with their numbers, expertise (capabilities, industries, processes, platforms, offerings), boards, education and certifications. Resumes and outreach notes will draw from it, so it's worth keeping accurate. It grows each time you add a source, and tells you what needs refreshing.</GP>
-      <GShot src="career.jpg" caption="Career profile: roles with scope, and each achievement with its numbers, themes, personas and sources."/>
+      <GH>Career map</GH>
+      <GP>The <B>Map</B> tab (the first one) pictures your career as a flow: your <B>roles</B> on the left (newest at the top), the <B>themes of proof</B> they produced in the middle, and your <B>personas</B> on the right. The wider a band, the more evidence behind it: outcomes count most, work in flight a little less, responsibilities least.</GP>
+      <GShot src="career-map.jpg" caption="Career map: roles → themes of proof → personas. Band width is evidence."/>
+      <GList items={[
+        <><B>Hover or click</B> a role, theme or persona to light up only its share of every band. A panel below lists the achievements and expertise behind it.</>,
+        <>The map shows your top 12 themes; the rest are grouped as <B>Other themes</B>. <B>Show all themes</B> expands them.</>,
+        <><B>Link expertise</B> (first time, about 1¢): Claude connects your expertise to themes and personas so the panels can show it. <B>Re-link expertise</B> after adding a lot of new expertise.</>,
+        <>In any panel, the small <B>P-01…P-06</B> codes on each achievement add or remove its link to a persona with one click.</>,
+      ]}/>
+      <GH>Persona lens</GH>
+      <GP>Pick a persona at the top of the map (or click it on the right). Its share of your career lights up in its colour, and the <B>Persona lens</B> opens below.</GP>
+      <GShot src="career-lens.jpg" caption="Persona lens: strength, verdict, gaps to close, what the persona asks for, and your best proof." width={760}/>
+      <GList items={[
+        <><B>Assess strength and gaps</B> (about 2¢): Claude reads the proof linked to the persona, like a search partner would, and gives a strength from 1 to 5, a short verdict, <B>gaps to close</B> with a next step for each, and how well you cover each skill, sector and company size the persona asks for.</>,
+        <><B>Best proof</B>: the achievements that make the strongest case. <B>Supporting expertise</B> lists the expertise linked to the persona.</>,
+        <>The result is saved. When the persona or your profile changes, the lens says so; click <B>Refresh</B> to re-assess. It never re-runs on its own.</>,
+        <>The lens measures you against the persona's own words, so keep its positioning, skills and sectors true (see <i>Personas</i>).</>,
+      ]}/>
+      <GShot src="career.jpg" caption="Experience: roles with scope, and each achievement with its numbers, themes, personas and sources."/>
       <GH>Add a source (resume or LinkedIn)</GH>
       <GSteps items={[
         <>Open <B>Career profile</B> in the sidebar.</>,
@@ -278,10 +296,12 @@ const GUIDE_CHAPTERS = [
         <><B>Review changes</B> shows everything it found, compared with your profile. <B>New</B> items are ticked; untick anything you don't want. <B>Known</B> items already exist and just gain this file as an extra source. <B>Similar</B> items look like an achievement you already have in different words. Claude checks them and suggests <B>Same achievement (merge)</B> or <B>Add as separate</B>; a merge keeps the new wording as an alternative. <B>Conflicts</B> (e.g. a different team size or job title): <B>Keep yours</B>, <B>Use this file's</B> or <B>Decide later</B>. Formatting differences (phone format, "UK" vs "United Kingdom", a month's difference in dates) aren't treated as conflicts, and each resume's own headline is kept as a version rather than a clash.</>,
         <>Click <B>Apply to my profile</B>. Nothing changes until you do.</>,
       ]}/>
+      <GTip><B>Adding expertise by hand:</B> the expertise form also has <B>Supports these personas</B>, so a new item can join the map straight away.</GTip>
       <GTip><B>Adding by hand:</B> anything you add or edit yourself is marked "Added by you" and confirmed today. A later resume import matches it like any other fact, so you won't get duplicates.</GTip>
       <GTip><B>Your LinkedIn profile as a PDF:</B> on LinkedIn, open your profile → <B>More</B> (or <B>Resources</B>) → <B>Save to PDF</B>. Old .doc files can't be read: save them as .docx or PDF first.</GTip>
       <GH>What's in each tab</GH>
       <GList items={[
+        <><B>Map</B>: your career map and persona lens (above).</>,
         <><B>Experience</B>: roles newest first, each with its scope (P&L, budget, team, geography). Under each role: <B>outcomes</B> first, then work <B>in flight</B>, then <B>responsibilities</B>. Edit anything, change an item's kind, add an achievement under a role, or click <B>Add a role</B> for one no resume covers.</>,
         <><B>Expertise & themes</B>: your capabilities, industries, business processes, platforms and market offerings (with your 1–5 ratings where your resume gives them), plus the themes your achievements show. Click a theme to see the evidence behind it. <B>+ Add expertise</B> adds one by hand; click any item to rename it or change its level. Themes and skills come from your achievements, so add them by editing an achievement.</>,
         <><B>Education & boards</B>: degrees, board seats, publications and talks, certifications and awards. Each section has <B>+ Add</B>, and every entry has <B>Edit</B> and <B>Remove</B>.</>,
@@ -379,6 +399,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['11 Oct 2026', [
+          'Career map: a new Map tab shows your roles flowing into themes of proof and on to your personas. Pick a persona to see its share light up, and get a strength score, gaps to close and your best proof. First time: click Link expertise.',
           'Personas drive everything: new or edited personas are used straight away for Gmail, LinkedIn and resume reading, and Claude links your Career profile proof to them automatically. Personas can be retired and brought back.',
           'Career profile: add to every tab by hand: a role, expertise (and change its name or level), degrees, board seats, publications and certifications (with Edit on each), or paste a note for Claude to read. Each tab now opens at the top.',
           'Claude costs under your control: Settings \u2192 Claude models & usage lets you pick the model for each job (Haiku is about 20\u00d7 cheaper than Sonnet) and shows this month\u2019s spend per job. Level Up now also caches its instructions, so batches cost less.',

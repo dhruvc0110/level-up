@@ -51,6 +51,7 @@
     career:   { label: 'Reading resumes',             def: 'sonnet', typical: { in: 9000,  out: 7000 } },
     dupes:    { label: 'Duplicate checks',            def: 'haiku',  typical: { in: 2500,  out: 800 } },
     tagging:  { label: 'Linking proof to personas',   def: 'haiku',  typical: { in: 9000,  out: 1500 } },
+    lens:     { label: 'Persona strength and gaps',   def: 'sonnet', typical: { in: 8000,  out: 1800 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {
