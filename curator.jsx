@@ -56,26 +56,25 @@ function PersonaCurator({ persona, onClose, onSave }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Auto-generate preview when key voice attributes change (debounced)
-  React.useEffect(() => {
-    if (!draft.name) return;
-    const t = setTimeout(() => regeneratePreview(false), 450);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line
-  }, [draft.toneDescriptors, draft.rhythm, draft.useWords, draft.avoidWords, scenario, draft.positioning]);
-
   const upd = (k, v) => setDraft(s => ({ ...s, [k]: v }));
 
-  const regeneratePreview = (showLoading = true) => {
-    if (showLoading) {
-      setPreviewGenerating(true);
-      setTimeout(() => {
-        setPreviewText(composeVoicePreview(draft, scenario));
-        setPreviewGenerating(false);
-      }, 1100);
-    } else {
-      setPreviewText(composeVoicePreview(draft, scenario));
-    }
+  // Real preview, written by Claude in this persona's voice. Runs only when you
+  // click (about 1¢); each scenario keeps its last preview until settings change.
+  const [previews, setPreviews] = React.useState({}); // scenario -> { text, sig }
+  const [previewError, setPreviewError] = React.useState(null);
+  const O = window.LU_OUTREACH;
+  const sigNow = O && O.voiceSig ? O.voiceSig(draft, scenario) : '';
+  const shown = previews[scenario];
+  const regeneratePreview = async () => {
+    if (!O || !O.previewVoice) { setPreviewError('Refresh the page (Cmd+Shift+R) to load the preview.'); return; }
+    if (!draft.name) { setPreviewError('Give the persona a name first.'); return; }
+    setPreviewGenerating(true); setPreviewError(null);
+    const sig = sigNow, sc = scenario;
+    try {
+      const text = await O.previewVoice(draft, sc);
+      setPreviews((m) => ({ ...m, [sc]: { text, sig } }));
+    } catch (e) { setPreviewError(String(e.message || e).slice(0, 160)); }
+    finally { setPreviewGenerating(false); }
   };
 
   const save = () => {
@@ -187,8 +186,9 @@ function PersonaCurator({ persona, onClose, onSave }) {
           }}>
             <PreviewPane draft={draft}
               scenario={scenario} setScenario={setScenario}
-              text={previewText} generating={previewGenerating}
-              onRegenerate={() => regeneratePreview(true)}/>
+              text={shown ? shown.text : ''} stale={!!shown && shown.sig !== sigNow} error={previewError}
+              generating={previewGenerating}
+              onRegenerate={regeneratePreview}/>
           </div>
         </div>
       </div>
@@ -473,7 +473,7 @@ function SamplesEditor({ value, onChange }) {
 }
 
 // ── Preview pane (right side) ──────────────────────────────────────────
-function PreviewPane({ draft, scenario, setScenario, text, generating, onRegenerate }) {
+function PreviewPane({ draft, scenario, setScenario, text, stale, error, generating, onRegenerate }) {
   return (
     <>
       <div style={{
@@ -490,13 +490,13 @@ function PreviewPane({ draft, scenario, setScenario, text, generating, onRegener
           onMouseEnter={(e) => e.currentTarget.style.color = 'var(--ink-1)'}
           onMouseLeave={(e) => e.currentTarget.style.color = 'var(--ink-3)'}>
             <Icon name="sparkles" size={11} stroke={1.4}/>
-            Regenerate
+            {text ? 'Regenerate' : 'Preview'}
           </button>
         </div>
         <div className="serif-italic" style={{
           fontSize: 14, color: 'var(--ink-3)', marginBottom: 14,
         }}>
-          Sample drafts in this persona's voice — updating live as you curate.
+          Written by Claude in this persona's voice, from your Career profile. Change the settings, then click Preview (about 1¢).
         </div>
 
         {/* Scenario selector */}
@@ -539,9 +539,11 @@ function PreviewPane({ draft, scenario, setScenario, text, generating, onRegener
             letterSpacing: '-0.003em', whiteSpace: 'pre-wrap',
             opacity: text ? 1 : 0.4,
           }}>
-            {text || 'Add a name and tone to see the voice come through.'}
+            {text || 'No preview yet for this scenario. Click Preview to hear how this persona sounds.'}
           </div>
         )}
+        {!generating && stale && <div style={{ marginTop: 12, fontSize: 12, color: 'var(--ink-3)' }}>Settings changed since this preview. <button onClick={onRegenerate} style={{ appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-2)', textDecoration: 'underline', fontSize: 12 }}>Regenerate</button></div>}
+        {!generating && error && <div style={{ marginTop: 12, fontSize: 12, color: 'var(--signal)' }}>{error}</div>}
       </div>
 
       {/* Voice fingerprint */}
@@ -592,69 +594,6 @@ function FpStat({ label, value, valueText }) {
 }
 
 // ── Voice preview composition (mock) ────────────────────────────────────
-function composeVoicePreview(draft, scenario) {
-  if (!draft.name) return '';
-  const tones = draft.toneDescriptors.map(t => t.toLowerCase());
-  const isMeasured = tones.includes('measured') || tones.includes('considered');
-  const isDirect = tones.includes('direct') || tones.includes('sharp');
-  const isWarm = tones.includes('warm');
-  const isDry = tones.includes('dry') || tones.includes('plainspoken');
-  const isContrarian = tones.includes('contrarian');
-
-  const rhythm = draft.rhythm;
-  const useWords = draft.useWords;
-  const positioning = draft.positioning.split('.')[0] || 'A senior technology operator with two decades of pattern recognition';
-
-  const opener = isDirect
-    ? (isContrarian ? 'An unpopular view, but: ' : 'Direct on this: ')
-    : isWarm
-    ? 'Genuinely glad to be in touch — '
-    : isDry
-    ? ''
-    : 'A short note. ';
-
-  const useWord = useWords[0] || (isMeasured ? 'considered' : 'practical');
-
-  if (scenario === 'recruiter') {
-    return `${opener}I am the candidate you described, with one caveat — I will only consider roles where the board is genuinely engaged with technology, not where it sits as the eighth agenda item.
-
-${positioning}.
-
-If that fits the search you are running, ${rhythm === 'terse' ? 'twenty minutes is enough.' : 'I would welcome twenty minutes of your time to compare notes on the mandate, the people, and what year one actually looks like.'}
-
-Best,
-[Sender]`;
-  }
-
-  if (scenario === 'cold') {
-    const greeting = isWarm ? 'Hope this finds you well.' : isDry ? '' : 'I will keep this short.';
-    return `Subject: A ${useWord} note
-
-${greeting}${greeting ? ' ' : ''}I read your recent piece on ${rhythm === 'longform' ? 'transformation governance and the difficulty of executive accountability across a multi-year program' : 'execution at scale'} — it lined up with what I have seen across the last decade of operating at that level.
-
-${positioning}.
-
-${rhythm === 'terse' ? 'Worth a conversation?' : 'If there is ever a conversation to be had on the work you are framing, I would welcome twenty minutes.'}
-
-Best,
-[Sender]`;
-  }
-
-  if (scenario === 'linkedin') {
-    return `${isContrarian ? 'A view I will keep holding: ' : ''}${rhythm === 'terse' ? 'Three things the average board still misses about technology.' : 'After twenty-five years of sitting across the table from boards, three things they still consistently get wrong about technology.'}
-
-${rhythm === 'terse' ? '' : 'Most boards confuse oversight with operating. They want metrics. They get vanity ones. They ask about cyber once a quarter and AI once a year. Neither is enough.'}
-
-${useWord.charAt(0).toUpperCase() + useWord.slice(1)} thoughts in the comments — would value the disagreement.`;
-  }
-
-  // bio
-  return `${draft.name}. ${positioning}.
-
-${draft.companySize ? `Operates at ${draft.companySize.toLowerCase()} scale. ` : ''}${draft.skills.length ? `Strongest in ${draft.skills.slice(0, 3).join(', ').toLowerCase()}. ` : ''}${isMeasured ? 'Known for the considered call.' : isDirect ? 'Known for getting to the point.' : ''}`;
-}
-
-// ── Completeness ───────────────────────────────────────────────────────
 function computeCompleteness(d) {
   let score = 0;
   if (d.name) score += 8;

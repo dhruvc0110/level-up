@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '11 Oct 2026';
+const GUIDE_UPDATED = '12 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -272,7 +272,9 @@ const GUIDE_CHAPTERS = [
         <><B>Retire</B> (on each card) takes a persona out of new job matching and your Career profile. Past jobs keep their label. It moves to <B>Retired personas</B> at the bottom, where <B>Bring back</B> restores it.</>,
       ]}/>
       <GTip>Keep each persona's <B>positioning</B>, <B>skills</B> and <B>sectors</B> true to you: Claude matches jobs and links your proof against exactly those words.</GTip>
-      <GTip>The curator's <B>voice preview</B> is sample text for now.</GTip>
+      <GH>Hear the voice before you save</GH>
+      <GP>The curator's <B>Voice preview</B> (right side) is written by Claude in this persona's voice from your Career profile. Pick a scenario (recruiter outreach, cold email to a CEO, LinkedIn post opener, short bio) and click <B>Preview</B> (about 1¢). Change tone, rhythm, words to use or avoid, or paste writing samples, and the preview says <B>Settings changed</B>: click <B>Regenerate</B> to hear the difference.</GP>
+      <GTip>Every voice setting, including rhythm and your writing samples, is also used for real outreach notes. Writing samples have the biggest effect: paste one to three paragraphs you've actually written in this voice.</GTip>
     </>,
   },
   {
@@ -408,6 +410,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['12 Oct 2026', [
+          'Personas: the voice preview is now written by Claude in each persona\u2019s voice (click Preview; about 1¢), so you can hear what your settings change. Outreach notes now also use the sentence rhythm and your writing samples.',
+        ]],
         ['11 Oct 2026', [
           'Outreach notes are real now: in any opportunity, pick the person and the kind of note (recruiter reply, hiring-manager note, warm-intro request with a forwardable blurb, follow-up, LinkedIn note) and Claude drafts it from your Career profile. Mark as sent sets a 7-day follow-up.',
           'Fixes: linking an achievement to a persona on the map no longer counts as confirming it, and the persona lens now notices when expertise or proof has been re-linked.',

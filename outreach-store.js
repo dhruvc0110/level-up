@@ -37,13 +37,30 @@
     return 'hiring';
   }
 
+  // Everything the persona says about how it sounds, for the prompt.
+  const RHYTHM = { terse: 'Terse: short sentences, few words, no padding.', balanced: 'Balanced: a mix of short and medium sentences.', longform: 'Long-form: fuller sentences that connect ideas, still economical.', 'long-form': 'Long-form: fuller sentences that connect ideas, still economical.' };
+  function voiceBlock(persona) {
+    if (!persona) return '';
+    const samples = (persona.writingSamples || []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 3);
+    const parts = [
+      persona.tone && 'Overall tone: ' + persona.tone,
+      (persona.toneDescriptors || []).length && 'Voice: ' + persona.toneDescriptors.join(', '),
+      persona.rhythm && 'Sentence rhythm: ' + (RHYTHM[String(persona.rhythm).toLowerCase()] || persona.rhythm),
+      (persona.useWords || []).length && 'Words this persona reaches for (use naturally where they fit): ' + persona.useWords.join(', '),
+      (persona.avoidWords || []).length && 'Words this persona never uses: ' + persona.avoidWords.join(', '),
+      samples.length && 'Writing samples in this voice (match their rhythm, word choice and sentence shape, not their content):\n' + samples.map((x, i) => `[${i + 1}] ${x.slice(0, 1200)}`).join('\n'),
+    ].filter(Boolean);
+    return parts.length ? 'PERSONA VOICE:\n' + parts.join('\n') : '';
+  }
+
   // Proof for this persona: the lens's best proof first, then other linked outcomes with numbers.
   function proofFor(personaId) {
     const c = career(), ach = c.achievements || [];
     const roleOf = (a) => (c.roles || []).find((r) => r.id === a.roleId) || {};
     const lens = personaId && c.personaLens && c.personaLens[personaId];
     const best = ((lens && lens.result && lens.result.best) || []).map((id) => ach.find((a) => a.id === id)).filter(Boolean);
-    const linked = ach.filter((a) => !personaId || (a.personas || []).includes(personaId));
+    let linked = ach.filter((a) => !personaId || (a.personas || []).includes(personaId));
+    if (!linked.length) linked = ach; // a new persona with nothing linked yet: use the whole record
     const rank = (a) => ((a.kind || 'outcome') === 'outcome' ? 2 : 0) + ((a.metrics || []).length ? 2 : 0) + (/present/i.test(roleOf(a).end || '') ? 1 : 0);
     const rest = linked.filter((a) => !best.includes(a)).sort((a, b) => rank(b) - rank(a));
     return [...best, ...rest].slice(0, 14).map((a) => ({ a, role: roleOf(a) }));
@@ -83,9 +100,8 @@ Output a single JSON object and nothing else:
     lines.push(`SENDER: ${person.name || '(name not on file)'}${person.headline ? ' — ' + person.headline : ''}`);
     if (persona) {
       lines.push(`PERSONA (the angle for this role): ${persona.code || ''} ${persona.name}. ${persona.positioning || ''}`);
-      const voice = [persona.tone && 'tone: ' + persona.tone, (persona.toneDescriptors || []).length && 'voice: ' + persona.toneDescriptors.join(', '),
-        (persona.useWords || []).length && 'words to use: ' + persona.useWords.join(', '), (persona.avoidWords || []).length && 'words to avoid: ' + persona.avoidWords.join(', ')].filter(Boolean).join('; ');
-      if (voice) lines.push('PERSONA VOICE: ' + voice);
+      const voice = voiceBlock(persona);
+      if (voice) lines.push(voice);
     }
     lines.push(`ROLE: ${opp.role || '?'} at ${opp.company || '?'}${opp.source ? ' (found via ' + opp.source + ')' : ''}`);
     const job = [e.summary, e.location && 'Location: ' + [e.location, e.workplace].filter(Boolean).join(', '), e.industry && 'Industry: ' + e.industry, opp.notes && 'Notes: ' + String(opp.notes).slice(0, 1200)].filter(Boolean);
@@ -129,5 +145,42 @@ Output a single JSON object and nothing else:
     };
   }
 
-  window.LU_OUTREACH = { TYPES, recipients, suggestType, proofFor, draft };
+  // ── Persona curator: a real sample in this persona's voice ─────────────
+  // Uses the persona as currently edited (saved or not). Runs only when asked.
+  const PREVIEWS = {
+    recruiter: 'A reply to an executive search partner who has approached the sender about a role that fits this persona. 110 to 150 words, with a subject line.',
+    cold: 'A cold email to the CEO of a company that fits this persona\'s target size and sectors, proposing a conversation. 100 to 140 words, with a subject line.',
+    linkedin: 'The opening of a LinkedIn post (first 2 to 4 lines, under 300 characters) on a theme from the proof that suits this persona. No hashtags.',
+    bio: 'A short professional bio paragraph in the first person for this persona, 70 to 100 words.',
+  };
+  function voiceSig(persona, scenario) {
+    return JSON.stringify([scenario, persona.name, persona.positioning, persona.tone, persona.toneDescriptors, persona.rhythm, persona.useWords, persona.avoidWords, persona.writingSamples, persona.companySize, persona.targetSectors, persona.skills]);
+  }
+  async function previewVoice(persona, scenario) {
+    const task = PREVIEWS[scenario] || PREVIEWS.recruiter;
+    const person = career().person || {};
+    const proof = proofFor(persona.id).slice(0, 8);
+    const user = [
+      `SENDER: ${person.name || '(name not on file)'}`,
+      `PERSONA: ${persona.name || 'Untitled'}. ${persona.positioning || ''}`,
+      [persona.companySize && 'Target company size: ' + persona.companySize, (persona.targetSectors || []).length && 'Target sectors: ' + persona.targetSectors.join(', '), (persona.skills || []).length && 'Skills to lead with: ' + persona.skills.join(', ')].filter(Boolean).join('\n'),
+      voiceBlock(persona),
+      'PROOF (from the sender\'s career record; use only these):\n' + (proof.length ? proof.map((p, i) => `P${i}: ${p.a.text}${(p.a.metrics || []).length ? ' [numbers: ' + p.a.metrics.map((m) => m.value).join(', ') + ']' : ''}`).join('\n') : '(none recorded yet)'),
+      'Task: ' + task + ' Where a company or person would be named, use a natural placeholder such as [Company] or [Name].',
+    ].filter(Boolean).join('\n\n');
+    const system = `You write sample text that shows how one of a senior executive's career personas sounds. The voice settings matter most: make tone, rhythm, word choices and the writing samples clearly audible, so that different personas read differently.
+
+${core().houseStyle || ''}
+(The persona's own voice settings refine this style; where they conflict, keep the persona's voice but never become flowery or curt.)
+
+Rules: use ONLY facts in PROOF; never invent results or numbers. Sign off with the sender's first name where a sign-off fits. Never write the P codes.
+Output a single JSON object and nothing else: { "text": "..." }`;
+    const model = core().modelFor ? core().modelFor('outreach') : core().models.parse;
+    const resp = await core().claude(model, system, user, 2000, null, 'outreach');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '');
+    return String(d.text || '').replace(/\bP(\d+)\b/g, (m, n) => (proof[+n] ? '“' + proof[+n].a.text.split(/\s+/).slice(0, 6).join(' ') + '…”' : m));
+  }
+
+  window.LU_OUTREACH = { TYPES, recipients, suggestType, proofFor, draft, voiceBlock, previewVoice, voiceSig };
 })();
