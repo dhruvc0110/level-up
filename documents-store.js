@@ -113,7 +113,8 @@
       const onIds = mode === 'brief' ? [] : ids.filter((id) => state.items && state.items[id] && state.items[id].on);
       const bullets = onIds.map((id) => state.items[id].text);
       // Keys name each block so a manual page break can sit before it.
-      return { key: 'role:' + r.id, title: r.title, company: r.company, dates: `${fmtMonth(r.start)} – ${fmtMonth(r.end)}`, location: r.location || '', bullets, bulletKeys: onIds.map((id) => 'b:' + id) };
+      // level 1 = a sub-bullet under the bullet above it.
+      return { key: 'role:' + r.id, title: r.title, company: r.company, dates: `${fmtMonth(r.start)} – ${fmtMonth(r.end)}`, location: r.location || '', bullets, bulletKeys: onIds.map((id) => 'b:' + id), bulletLevels: onIds.map((id, i) => (i > 0 && state.items[id].level ? 1 : 0)) };
     }).filter(Boolean);
     const title = (k) => (f.sectionTitles[k] && String(f.sectionTitles[k]).trim()) || SECTION_TITLES[k];
     const content = {
@@ -130,7 +131,7 @@
       // Board bio: a profile paragraph, selected achievements across roles, then a short career line.
       const highlights = experience.flatMap((x) => x.bullets).slice(0, 6);
       const highlightKeys = experience.flatMap((x) => x.bulletKeys).slice(0, 6);
-      sections = sections.map((x) => (x.key === 'summary' ? { ...x, title: f.sectionTitles.summary || 'Profile' } : x.key === 'experience' ? { ...x, title: f.sectionTitles.experience || 'Career', items: experience.map((e) => ({ ...e, bullets: [], bulletKeys: [] })) } : x));
+      sections = sections.map((x) => (x.key === 'summary' ? { ...x, title: f.sectionTitles.summary || 'Profile' } : x.key === 'experience' ? { ...x, title: f.sectionTitles.experience || 'Career', items: experience.map((e) => ({ ...e, bullets: [], bulletKeys: [], bulletLevels: [] })) } : x));
       const at = sections.findIndex((x) => x.key === 'experience');
       if (highlights.length) sections.splice(Math.max(0, at), 0, { key: 'highlights', title: SECTION_TITLES.highlights, items: highlights, itemKeys: highlightKeys });
     }
@@ -325,7 +326,7 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
         const cp = (children, align) => [new D.Paragraph({ children, alignment: align, spacing: { before, after: 40, line: LINE }, keepNext: true })];
         out.push(table([new D.TableRow({ cantSplit: true, children: [cellOf(cp(first, D.AlignmentType.LEFT), width - right), cellOf(cp([run(x.dates, { size: pt(st.size.small), color: '555555' })], D.AlignmentType.RIGHT), right)] })], [width - right, right]));
       }
-      x.bullets.forEach((b, i) => out.push(...brk((x.bulletKeys || [])[i]), para([run(b)], { numbering: { reference: 'lu-bullets', level: 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
+      x.bullets.forEach((b, i) => out.push(...brk((x.bulletKeys || [])[i]), para([run(b)], { numbering: { reference: 'lu-bullets', level: (x.bulletLevels || [])[i] || 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
       return out;
     };
     // A manual page break: an empty, near-zero-height paragraph that starts a new page.
@@ -366,7 +367,9 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
       styles: { default: { document: { run: { font: st.body, size: pt(st.size.body) } } } },
       // Bullets with a hanging indent, so wrapped lines align with the text.
       numbering: { config: [{ reference: 'lu-bullets', levels: [{ level: 0, format: D.LevelFormat.BULLET, text: st.bullet, alignment: D.AlignmentType.LEFT,
-        style: { paragraph: { indent: { left: 260, hanging: 200 } }, run: { font: 'Arial', size: pt(st.size.body - 1), color: st.color } } }] }] },
+        style: { paragraph: { indent: { left: 260, hanging: 200 } }, run: { font: 'Arial', size: pt(st.size.body - 1), color: st.color } } },
+        { level: 1, format: D.LevelFormat.BULLET, text: '–', alignment: D.AlignmentType.LEFT,
+          style: { paragraph: { indent: { left: 560, hanging: 200 } }, run: { font: 'Arial', size: pt(st.size.body - 1), color: st.color } } }] }] },
       sections: [{ properties: { page: { size: { width: Math.round(st.page.w * TWIP), height: Math.round(st.page.h * TWIP) },
         margin: { top: Math.round(st.margin * TWIP), bottom: Math.round(st.margin * TWIP), left: Math.round(st.margin * TWIP), right: Math.round(st.margin * TWIP) } } }, children: kids }],
     });

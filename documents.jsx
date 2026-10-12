@@ -125,15 +125,35 @@ function FormatControls({ format, onChange, kind, onFit, fitting, persona, onSav
 }
 
 // ── Live preview at true page size, scaled to fit, with a page-fit check ──
+// Hidden measuring copies render plain text, so only the visible page edits.
+const PvMeasure = React.createContext(false);
+function PvBullet({ text, level, mark, color, gap, scale, edit, onEdit, onDone }) {
+  const measuring = React.useContext(PvMeasure);
+  const editing = edit != null && !measuring;
+  return (
+    <div style={{ display: 'flex', gap: 6, paddingLeft: 4 + (level ? 18 : 0), marginTop: gap }}>
+      <span style={{ color }}>{level ? '–' : mark}</span>
+      {editing ? (
+        <textarea autoFocus value={edit} onChange={(e) => onEdit(e.target.value)} onBlur={() => onDone(true)} aria-label="Edit bullet"
+          onFocus={(e) => { const v = e.target; v.selectionStart = v.selectionEnd = v.value.length; }}
+          onKeyDown={(e) => { if (e.key === 'Escape') onDone(false); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onDone(true); } }}
+          ref={(el) => { if (el) { el.style.height = '0px'; el.style.height = el.scrollHeight + 'px'; } }}
+          style={{ flex: 1, font: 'inherit', color: 'inherit', lineHeight: 'inherit', padding: 0, margin: 0, border: 'none', outline: `${1.5 / scale}px solid #1f3a5f`, background: '#f3f6fb', resize: 'none', overflow: 'hidden' }}/>
+      ) : <span style={{ flex: 1 }}>{edit != null ? edit : text}</span>}
+    </div>
+  );
+}
+
 // The preview lays the document out as real pages: every block (heading, role,
 // bullet…) is measured at true size, then placed page by page. Manual breaks
 // ("Start page here") are block keys saved with the resume and sent to the Doc.
-function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
+function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
   useDocFonts();
   const outer = React.useRef(null), meas = React.useRef(null), sideMeas = React.useRef(null), headMeas = React.useRef(null);
   const [scale, setScale] = React.useState(0.6);
   const [dims, setDims] = React.useState({ hs: [], side: 0, head: 0 });
   const [hover, setHover] = React.useState(null);
+  const [editing, setEditing] = React.useState(null); // { key, text } while a bullet is edited on the page
   const st = model.style, DPI = 96, px = (ptv) => ptv * 4 / 3;
   const pageW = st.page.w * DPI, pageH = st.page.h * DPI, m = st.margin * DPI, usable = pageH - 2 * m;
   const contentW = pageW - 2 * m, sideW = contentW * 0.32, gapW = 0.25 * DPI, mainW = contentW - sideW - gapW;
@@ -148,8 +168,14 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
       textAlign: st.center ? 'center' : 'left', borderBottom: inSide ? 'none' : st.rule === 'accent' ? `1.5px solid ${col}` : st.rule === 'hair' ? '0.75px solid #999' : 'none',
       paddingBottom: 2, margin: `${px(st.gap.section)}px 0 ${px(st.gap.para * 2)}px` }}>{st.caps ? t.toUpperCase() : t}</div>
   );
-  const bullet = (t, j) => (
-    <div key={j} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginTop: px(st.gap.para) }}><span style={{ color: col }}>{st.bullet}</span><span>{t}</span></div>
+  const finishEdit = (save) => {
+    if (save && editing && onBullet) onBullet(editing.key, 'text', editing.text.replace(/\s*\n\s*/g, ' ').trim());
+    setEditing(null);
+  };
+  const bullet = (t, j, level, key) => (
+    <PvBullet key={j} text={t} level={level} mark={st.bullet} color={col} gap={px(st.gap.para)} scale={scale}
+      edit={editing && editing.key === key ? editing.text : null}
+      onEdit={(text) => setEditing({ key, text })} onDone={finishEdit}/>
   );
   const roleHead = (x) => {
     const first = st.roleOrder === 'company' ? <span><b>{x.company}</b>{'  ·  '}{x.title}</span> : <span><b>{x.title}</b>{'  ·  '}{x.company}</span>;
@@ -193,9 +219,12 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
       if (sec.key === 'experience') {
         sec.items.forEach((x) => {
           add(x.key, roleHead(x), { brk: true, keepNext: x.bullets.length > 0 });
-          x.bullets.forEach((t, j) => add((x.bulletKeys || [])[j] || x.key + ':' + j, bullet(t, j), { brk: true }));
+          x.bullets.forEach((t, j) => {
+            const key = (x.bulletKeys || [])[j] || x.key + ':' + j;
+            add(key, bullet(t, j, (x.bulletLevels || [])[j] || 0, key), { brk: true, tools: { text: t, level: (x.bulletLevels || [])[j] || 0, nest: j > 0, up: j > 0, down: j < x.bullets.length - 1 } });
+          });
         });
-      } else if (sec.key === 'highlights') sec.items.forEach((t, i) => add((sec.itemKeys || [])[i] || 'highlights:' + i, bullet(t, i), { brk: true }));
+      } else if (sec.key === 'highlights') sec.items.forEach((t, i) => { const key = (sec.itemKeys || [])[i] || 'highlights:' + i; add(key, bullet(t, i, 0, key), { brk: true, tools: { text: t, level: 0 } }); });
       else if (sec.key === 'skills') add('skills:0', <div>{sec.items.join('  ·  ')}</div>, { brk: true });
       else sec.items.forEach((t, i) => add(sec.key + ':' + i, <div>{t}</div>, { brk: true }));
     });
@@ -253,10 +282,23 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
 
   const blockView = ({ b, manual }, idx) => {
     const first = idx === 0;
-    const offer = canBreak && b.brk && !first && hover === b.key;
+    const tools = b.tools && onBullet && /^b:/.test(b.key) && hover === b.key && !(editing && editing.key === b.key);
+    const offer = canBreak && b.brk && !first && hover === b.key && !b.tools;
+    const tb = { ...pill, position: 'static', background: '#1f3a5f', color: '#fff', borderRadius: 0 };
+    const act = (a, v) => (e) => { e.stopPropagation(); setHover(null); onBullet(b.key, a, v); };
     return (
-      <div key={b.key} style={{ display: 'flow-root', position: 'relative', outline: offer ? `${1 / scale}px dashed #9aa7b8` : 'none', outlineOffset: 2 / scale }}
-        onMouseEnter={canBreak && b.brk ? () => setHover(b.key) : undefined}>
+      <div key={b.key} style={{ display: 'flow-root', position: 'relative', outline: offer || tools ? `${1 / scale}px dashed #9aa7b8` : 'none', outlineOffset: 2 / scale }}
+        onMouseEnter={(canBreak && b.brk) || b.tools ? () => setHover(b.key) : undefined}>
+        {tools && (
+          <div style={{ position: 'absolute', zIndex: 3, right: 0, bottom: '100%', display: 'flex', gap: 1 / scale, borderRadius: 3 / scale, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
+            <button style={tb} title="Reword this bullet on the page" onClick={(e) => { e.stopPropagation(); setEditing({ key: b.key, text: b.tools.text }); setHover(null); }}>Edit</button>
+            {b.tools.nest && <button style={tb} title={b.tools.level ? 'Make it a main bullet again' : 'Nest it under the bullet above'} onClick={act('level', b.tools.level ? 0 : 1)}>{b.tools.level ? '← Bullet' : '→ Sub-bullet'}</button>}
+            {b.tools.up && <button style={tb} title="Move up" onClick={act('move', -1)}>↑</button>}
+            {b.tools.down && <button style={tb} title="Move down" onClick={act('move', 1)}>↓</button>}
+            <button style={tb} title="Leave this bullet out (tick it again on the left)" onClick={act('hide')}>Hide</button>
+            {canBreak && !first && <button style={tb} title="Move this and everything after it to the next page" onClick={(e) => { e.stopPropagation(); setBreak(b.key, true); setHover(null); }}>↵ New page</button>}
+          </div>
+        )}
         {offer && (
           <button style={{ ...pill, top: 0, right: 0, background: '#1f3a5f', color: '#fff' }} onClick={() => { setBreak(b.key, true); setHover(null); }}
             title="Move this and everything after it to the next page">↵ Start page here</button>
@@ -280,15 +322,16 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
       </div>
       {canBreak && (
         <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>
-          To move a page break, point at a section, role or bullet and click <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Start page here</b>.
+          Point at a bullet to edit, nest, move or hide it; point at a section or role and click <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Start page here</b> to move a page break.
           {manualCount > 0 && <> {manualCount} break{manualCount === 1 ? '' : 's'} added · <button style={docLink} onClick={() => onBreaks([])}>Remove all</button></>}
         </div>
       )}
       {sidebar && model.kind === 'resume' && (
-        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>Page breaks can't be moved in the Sidebar template; pick another template to place them yourself.</div>
+        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>Point at a bullet to edit, nest, move or hide it. Page breaks can't be moved in the Sidebar template.</div>
       )}
 
       {/* Hidden measuring column at true size */}
+      <PvMeasure.Provider value={true}>
       <div aria-hidden="true" style={{ position: 'absolute', left: -100000, top: 0, visibility: 'hidden', pointerEvents: 'none' }}>
         <div ref={meas} style={{ ...body, width: sidebar ? mainW : contentW }}>
           {blocks.map((b) => <div key={b.key} style={{ display: 'flow-root' }}>{b.node}</div>)}
@@ -296,6 +339,7 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
         {sidebar && <div ref={headMeas} style={{ ...body, width: contentW, display: 'flow-root' }}>{headerNode}</div>}
         {sidebar && <div ref={sideMeas} style={{ ...body, width: sideW, padding: '6px 9px', boxSizing: 'border-box' }}>{model.side.map(sideSection)}</div>}
       </div>
+      </PvMeasure.Provider>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {pages.map((pg, pi) => (
@@ -446,6 +490,28 @@ function ResumeWorkspace({ opp, onUpdate }) {
     if (window.LU_CAREER && window.LU_CAREER.markUsed) window.LU_CAREER.markUsed(v.used || [], { ref: opp.id + ':' + v.id, kind: 'resume', oppId: opp.id, company: opp.company, role: opp.role, at });
     window.LU_CORE.pill('Resume marked as sent');
   };
+  // Bullet edits from the page preview or the list: reword, nest, move, hide.
+  const roleList = (roleId) => {
+    const order = ((st.order && st.order[roleId]) || []).filter((id) => ach.some((a) => a.id === id));
+    return [...order, ...ach.filter((a) => a.roleId === roleId && !order.includes(a.id)).map((a) => a.id)];
+  };
+  const moveItem = (roleId, id, dir) => {
+    const ids = roleList(roleId), i = ids.indexOf(id);
+    let j = i + dir;
+    while (j >= 0 && j < ids.length && !(st.items[ids[j]] && st.items[ids[j]].on)) j += dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    const next = ids.filter((x) => x !== id);
+    next.splice(j, 0, id);
+    save({ ...st, order: { ...(st.order || {}), [roleId]: next } });
+  };
+  const bulletAction = (key, action, value) => {
+    const id = String(key).replace(/^b:/, ''), a = ach.find((x) => x.id === id);
+    if (!a || !st.items[id]) return;
+    if (action === 'text') { if (value) setItem(id, { text: value }); }
+    else if (action === 'level') setItem(id, { level: value });
+    else if (action === 'hide') setItem(id, { on: false });
+    else if (action === 'move') moveItem(a.roleId, id, value);
+  };
   const STATUS = { covered: ['✓', 'oklch(62% 0.12 150)'], partial: ['◐', 'oklch(70% 0.12 75)'], gap: ['▲', 'var(--signal)'] };
   const ach = c.achievements || [];
   return (
@@ -476,7 +542,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
           </div>
         )}
 
-        <div style={{ ...docMono, margin: '18px 0 2px' }}>Experience: Claude's picks are ticked; untick, tick or edit any line</div>
+        <div style={{ ...docMono, margin: '18px 0 2px' }}>Experience: Claude's picks are ticked; tick, edit, nest (→) or reorder (↑ ↓) any line, here or on the page</div>
         {roles.map((r) => {
           const mode = (st.roles[r.id] && st.roles[r.id].mode) || 'full';
           const order = (st.order && st.order[r.id]) || [];
@@ -491,14 +557,27 @@ function ResumeWorkspace({ opp, onUpdate }) {
               </div>
               {mode === 'full' && list.map((a) => {
                 const it = st.items[a.id] || { on: false, text: a.text, original: a.text };
+                const onList = list.filter((x) => st.items[x.id] && st.items[x.id].on);
+                const pos = onList.findIndex((x) => x.id === a.id);
+                const mini = { appearance: 'none', border: '1px solid var(--line-1)', background: 'transparent', color: 'var(--ink-2)', borderRadius: 3, fontSize: 11, lineHeight: 1, padding: '3px 5px', cursor: 'pointer' };
                 return (
-                  <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                  <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0', paddingLeft: it.on && it.level && pos > 0 ? 22 : 0 }}>
                     <input type="checkbox" checked={!!it.on} onChange={(e) => setItem(a.id, { on: e.target.checked })} style={{ marginTop: 6 }}/>
                     <textarea value={it.text} onChange={(e) => setItem(a.id, { text: e.target.value })} rows={Math.max(1, Math.ceil(it.text.length / 70))}
                       title={it.original && it.original !== it.text ? 'Your original: ' + it.original : ''}
                       style={{ flex: 1, resize: 'vertical', fontFamily: 'var(--sans)', fontSize: 12.5, lineHeight: 1.45, padding: '3px 6px', background: 'transparent',
                         color: it.on ? 'var(--ink-1)' : 'var(--ink-4)', border: '1px solid ' + (it.on ? 'var(--line-1)' : 'transparent'), borderRadius: 3 }}/>
-                    {it.original && it.original !== it.text && <button style={{ ...docLink, fontSize: 11, marginTop: 5 }} title={it.original} onClick={() => setItem(a.id, { text: it.original })}>Original</button>}
+                    {(it.on || (it.original && it.original !== it.text)) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 2 }}>
+                        {it.on && <div style={{ display: 'flex', gap: 3 }}>
+                          <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title={it.level ? 'Make it a main bullet again' : 'Nest it under the bullet above'}
+                            onClick={() => setItem(a.id, { level: it.level ? 0 : 1 })}>{it.level ? '←' : '→'}</button>
+                          <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title="Move up" onClick={() => moveItem(r.id, a.id, -1)}>↑</button>
+                          <button style={{ ...mini, opacity: pos < onList.length - 1 ? 1 : 0.35 }} disabled={pos >= onList.length - 1} title="Move down" onClick={() => moveItem(r.id, a.id, 1)}>↓</button>
+                        </div>}
+                        {it.original && it.original !== it.text && <button style={{ ...docLink, fontSize: 11 }} title={it.original} onClick={() => setItem(a.id, { text: it.original })}>Original</button>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -525,7 +604,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}
         {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 8 }}>{error}</div>}
         <DocPreview model={model} targetPages={D.normalize(st.format).pages} onMeasure={(p) => { measured.current = p; }}
-          onBreaks={(keys) => save({ ...st, breaks: keys })}/>
+          onBreaks={(keys) => save({ ...st, breaks: keys })} onBullet={bulletAction}/>
         <DocVersions versions={st.versions} onSent={markSent}/>
       </div>
     </div>
