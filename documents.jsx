@@ -169,8 +169,18 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
       paddingBottom: 2, margin: `${px(st.gap.section)}px 0 ${px(st.gap.para * 2)}px` }}>{st.caps ? t.toUpperCase() : t}</div>
   );
   const finishEdit = (save) => {
-    if (save && editing && onBullet) onBullet(editing.key, 'text', editing.text.replace(/\s*\n\s*/g, ' ').trim());
+    if (!editing) return;
+    const text = editing.text.replace(/\s*\n\s*/g, ' ').trim();
+    if (onBullet) {
+      // A bullet just added and left empty (or cancelled) is removed again.
+      if (editing.fresh && (!save || !text)) onBullet(editing.key, 'delete');
+      else if (save && text) onBullet(editing.key, 'text', text);
+    }
     setEditing(null);
+  };
+  const addBullet = (roleKey, afterKey) => {
+    const key = onBullet(roleKey, 'add', afterKey);
+    if (key) setEditing({ key, text: '', fresh: true });
   };
   const bullet = (t, j, level, key) => (
     <PvBullet key={j} text={t} level={level} mark={st.bullet} color={col} gap={px(st.gap.para)} scale={scale}
@@ -218,10 +228,10 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
       add('sec:' + sec.key, sectionHead(sec.title, false), { brk: true, keepNext: true, label: sec.title });
       if (sec.key === 'experience') {
         sec.items.forEach((x) => {
-          add(x.key, roleHead(x), { brk: true, keepNext: x.bullets.length > 0 });
+          add(x.key, roleHead(x), { brk: true, keepNext: x.bullets.length > 0, role: true });
           x.bullets.forEach((t, j) => {
             const key = (x.bulletKeys || [])[j] || x.key + ':' + j;
-            add(key, bullet(t, j, (x.bulletLevels || [])[j] || 0, key), { brk: true, tools: { text: t, level: (x.bulletLevels || [])[j] || 0, nest: j > 0, up: j > 0, down: j < x.bullets.length - 1 } });
+            add(key, bullet(t, j, (x.bulletLevels || [])[j] || 0, key), { brk: true, tools: { text: t, level: (x.bulletLevels || [])[j] || 0, nest: j > 0, up: j > 0, down: j < x.bullets.length - 1, role: x.key } });
           });
         });
       } else if (sec.key === 'highlights') sec.items.forEach((t, i) => { const key = (sec.itemKeys || [])[i] || 'highlights:' + i; add(key, bullet(t, i, 0, key), { brk: true, tools: { text: t, level: 0 } }); });
@@ -283,12 +293,13 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
   const blockView = ({ b, manual }, idx) => {
     const first = idx === 0;
     const tools = b.tools && onBullet && /^b:/.test(b.key) && hover === b.key && !(editing && editing.key === b.key);
-    const offer = canBreak && b.brk && !first && hover === b.key && !b.tools;
+    const roleTools = b.role && onBullet && hover === b.key && model.kind === 'resume' && !st.narrative;
+    const offer = canBreak && b.brk && !first && hover === b.key && !b.tools && !roleTools;
     const tb = { ...pill, position: 'static', background: '#1f3a5f', color: '#fff', borderRadius: 0 };
     const act = (a, v) => (e) => { e.stopPropagation(); setHover(null); onBullet(b.key, a, v); };
     return (
       <div key={b.key} style={{ display: 'flow-root', position: 'relative', outline: offer || tools ? `${1 / scale}px dashed #9aa7b8` : 'none', outlineOffset: 2 / scale }}
-        onMouseEnter={(canBreak && b.brk) || b.tools ? () => setHover(b.key) : undefined}>
+        onMouseEnter={(canBreak && b.brk) || b.tools || b.role ? () => setHover(b.key) : undefined}>
         {tools && (
           <div style={{ position: 'absolute', zIndex: 3, right: 0, bottom: '100%', display: 'flex', gap: 1 / scale, borderRadius: 3 / scale, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
             <button style={tb} title="Reword this bullet on the page" onClick={(e) => { e.stopPropagation(); setEditing({ key: b.key, text: b.tools.text }); setHover(null); }}>Edit</button>
@@ -296,7 +307,14 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
             {b.tools.up && <button style={tb} title="Move up" onClick={act('move', -1)}>↑</button>}
             {b.tools.down && <button style={tb} title="Move down" onClick={act('move', 1)}>↓</button>}
             <button style={tb} title="Leave this bullet out (tick it again on the left)" onClick={act('hide')}>Hide</button>
+            <button style={tb} title="Add your own bullet below this one" onClick={(e) => { e.stopPropagation(); setHover(null); addBullet(b.tools.role, b.key); }}>+ Below</button>
             {canBreak && !first && <button style={tb} title="Move this and everything after it to the next page" onClick={(e) => { e.stopPropagation(); setBreak(b.key, true); setHover(null); }}>↵ New page</button>}
+          </div>
+        )}
+        {roleTools && (
+          <div style={{ position: 'absolute', zIndex: 3, right: 0, bottom: '100%', display: 'flex', gap: 1 / scale, borderRadius: 3 / scale, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
+            <button style={tb} title="Add your own bullet at the top of this role" onClick={(e) => { e.stopPropagation(); setHover(null); addBullet(b.key, null); }}>+ Bullet</button>
+            {canBreak && !first && <button style={tb} title="Move this role and everything after it to the next page" onClick={(e) => { e.stopPropagation(); setBreak(b.key, true); setHover(null); }}>↵ Start page here</button>}
           </div>
         )}
         {offer && (
@@ -322,7 +340,7 @@ function DocPreview({ model, targetPages, onMeasure, onBreaks, onBullet }) {
       </div>
       {canBreak && (
         <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>
-          Point at a bullet to edit, nest, move or hide it; point at a section or role and click <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Start page here</b> to move a page break.
+          Point at a bullet to edit, nest, move, hide or add one below; point at a role to add a bullet; point at a section or role and click <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Start page here</b> to move a page break.
           {manualCount > 0 && <> {manualCount} break{manualCount === 1 ? '' : 's'} added · <button style={docLink} onClick={() => onBreaks([])}>Remove all</button></>}
         </div>
       )}
@@ -491,8 +509,9 @@ function ResumeWorkspace({ opp, onUpdate }) {
     window.LU_CORE.pill('Resume marked as sent');
   };
   // Bullet edits from the page preview or the list: reword, nest, move, hide.
+  const isCustom = (id) => !!(st.items[id] && st.items[id].custom);
   const roleList = (roleId) => {
-    const order = ((st.order && st.order[roleId]) || []).filter((id) => ach.some((a) => a.id === id));
+    const order = ((st.order && st.order[roleId]) || []).filter((id) => ach.some((a) => a.id === id) || isCustom(id));
     return [...order, ...ach.filter((a) => a.roleId === roleId && !order.includes(a.id)).map((a) => a.id)];
   };
   const moveItem = (roleId, id, dir) => {
@@ -504,13 +523,35 @@ function ResumeWorkspace({ opp, onUpdate }) {
     next.splice(j, 0, id);
     save({ ...st, order: { ...(st.order || {}), [roleId]: next } });
   };
+  // Your own bullets: kept in this resume only (items[id].custom), never added to the Career profile.
+  const addCustom = (roleId, afterId, text) => {
+    const id = 'my-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const ids = roleList(roleId), at = afterId ? ids.indexOf(afterId) + 1 : 0;
+    const next = [...ids];
+    next.splice(at > 0 ? at : afterId ? ids.length : 0, 0, id);
+    save({ ...st, items: { ...st.items, [id]: { on: true, text, original: null, custom: true, roleId } }, order: { ...(st.order || {}), [roleId]: next } });
+    return id;
+  };
+  const deleteCustom = (id) => {
+    const it = st.items[id];
+    if (!it || !it.custom) return;
+    const items = { ...st.items };
+    delete items[id];
+    save({ ...st, items, order: { ...(st.order || {}), [it.roleId]: ((st.order && st.order[it.roleId]) || []).filter((x) => x !== id) } });
+  };
   const bulletAction = (key, action, value) => {
-    const id = String(key).replace(/^b:/, ''), a = ach.find((x) => x.id === id);
-    if (!a || !st.items[id]) return;
+    if (action === 'add') {
+      const roleId = String(key).replace(/^role:/, '');
+      return 'b:' + addCustom(roleId, value ? String(value).replace(/^b:/, '') : null, 'New bullet');
+    }
+    const id = String(key).replace(/^b:/, ''), it = st.items[id];
+    if (!it) return;
+    const roleId = it.custom ? it.roleId : (ach.find((x) => x.id === id) || {}).roleId;
     if (action === 'text') { if (value) setItem(id, { text: value }); }
+    else if (action === 'delete') deleteCustom(id);
     else if (action === 'level') setItem(id, { level: value });
     else if (action === 'hide') setItem(id, { on: false });
-    else if (action === 'move') moveItem(a.roleId, id, value);
+    else if (action === 'move' && roleId) moveItem(roleId, id, value);
   };
   const STATUS = { covered: ['✓', 'oklch(62% 0.12 150)'], partial: ['◐', 'oklch(70% 0.12 75)'], gap: ['▲', 'var(--signal)'] };
   const ach = c.achievements || [];
@@ -546,7 +587,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
         {roles.map((r) => {
           const mode = (st.roles[r.id] && st.roles[r.id].mode) || 'full';
           const order = (st.order && st.order[r.id]) || [];
-          const list = [...order.map((id) => ach.find((a) => a.id === id)).filter(Boolean), ...ach.filter((a) => a.roleId === r.id && !order.includes(a.id))];
+          const list = [...order.map((id) => ach.find((a) => a.id === id) || (isCustom(id) ? { id, text: st.items[id].text, roleId: r.id, custom: true } : null)).filter(Boolean), ...ach.filter((a) => a.roleId === r.id && !order.includes(a.id))];
           return (
             <div key={r.id} style={{ borderTop: '1px solid var(--line-1)', padding: '10px 0' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -563,24 +604,32 @@ function ResumeWorkspace({ opp, onUpdate }) {
                 return (
                   <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0', paddingLeft: it.on && it.level && pos > 0 ? 22 : 0 }}>
                     <input type="checkbox" checked={!!it.on} onChange={(e) => setItem(a.id, { on: e.target.checked })} style={{ marginTop: 6 }}/>
-                    <textarea value={it.text} onChange={(e) => setItem(a.id, { text: e.target.value })} rows={Math.max(1, Math.ceil(it.text.length / 70))}
-                      title={it.original && it.original !== it.text ? 'Your original: ' + it.original : ''}
-                      style={{ flex: 1, resize: 'vertical', fontFamily: 'var(--sans)', fontSize: 12.5, lineHeight: 1.45, padding: '3px 6px', background: 'transparent',
-                        color: it.on ? 'var(--ink-1)' : 'var(--ink-4)', border: '1px solid ' + (it.on ? 'var(--line-1)' : 'transparent'), borderRadius: 3 }}/>
-                    {(it.on || (it.original && it.original !== it.text)) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 2 }}>
-                        {it.on && <div style={{ display: 'flex', gap: 3 }}>
-                          <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title={it.level ? 'Make it a main bullet again' : 'Nest it under the bullet above'}
-                            onClick={() => setItem(a.id, { level: it.level ? 0 : 1 })}>{it.level ? '←' : '→'}</button>
-                          <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title="Move up" onClick={() => moveItem(r.id, a.id, -1)}>↑</button>
-                          <button style={{ ...mini, opacity: pos < onList.length - 1 ? 1 : 0.35 }} disabled={pos >= onList.length - 1} title="Move down" onClick={() => moveItem(r.id, a.id, 1)}>↓</button>
-                        </div>}
-                        {it.original && it.original !== it.text && <button style={{ ...docLink, fontSize: 11 }} title={it.original} onClick={() => setItem(a.id, { text: it.original })}>Original</button>}
-                      </div>
-                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <textarea value={it.text} onChange={(e) => setItem(a.id, { text: e.target.value })} rows={Math.max(1, Math.ceil(it.text.length / 60))}
+                        placeholder={a.custom ? 'Type your new bullet' : ''} autoFocus={!!(a.custom && !it.text)}
+                        title={it.original && it.original !== it.text ? 'Your original: ' + it.original : ''}
+                        style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'var(--sans)', fontSize: 12.5, lineHeight: 1.45, padding: '3px 6px', background: 'transparent',
+                          color: it.on ? 'var(--ink-1)' : 'var(--ink-4)', border: '1px solid ' + (it.on ? 'var(--line-1)' : 'transparent'), borderRadius: 3 }}/>
+                      {/* Controls sit under the text so the wording gets the full width */}
+                      {(it.on || a.custom || (it.original && it.original !== it.text)) && (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
+                          {it.on && <>
+                            <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title={it.level ? 'Make it a main bullet again' : 'Nest it under the bullet above'}
+                              onClick={() => setItem(a.id, { level: it.level ? 0 : 1 })}>{it.level ? '← Bullet' : '→ Sub-bullet'}</button>
+                            <button style={{ ...mini, opacity: pos > 0 ? 1 : 0.35 }} disabled={pos <= 0} title="Move up" onClick={() => moveItem(r.id, a.id, -1)}>↑</button>
+                            <button style={{ ...mini, opacity: pos < onList.length - 1 ? 1 : 0.35 }} disabled={pos >= onList.length - 1} title="Move down" onClick={() => moveItem(r.id, a.id, 1)}>↓</button>
+                          </>}
+                          {it.original && it.original !== it.text && <button style={{ ...docLink, fontSize: 11 }} title={it.original} onClick={() => setItem(a.id, { text: it.original })}>Original</button>}
+                          {a.custom && <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>Your bullet · <button style={{ ...docLink, fontSize: 11 }} title="Delete this bullet" onClick={() => deleteCustom(a.id)}>Delete</button></span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
+              {mode === 'full' && (
+                <button style={{ ...docLink, fontSize: 12, marginTop: 4 }} onClick={() => addCustom(r.id, list.length ? list[list.length - 1].id : null, '')}>+ Add a bullet</button>
+              )}
             </div>
           );
         })}

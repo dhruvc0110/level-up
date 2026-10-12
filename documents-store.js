@@ -110,7 +110,8 @@
       if (mode === 'omit') return null;
       const order = (state.order && state.order[r.id]) || [];
       const ids = [...order, ...c.achievements.filter((a) => a.roleId === r.id).map((a) => a.id).filter((id) => !order.includes(id))];
-      const onIds = mode === 'brief' ? [] : ids.filter((id) => state.items && state.items[id] && state.items[id].on);
+      // Bullets you added yourself (items with custom: true) live only in this resume's order.
+      const onIds = mode === 'brief' ? [] : ids.filter((id) => state.items && state.items[id] && state.items[id].on && String(state.items[id].text || '').trim());
       const bullets = onIds.map((id) => state.items[id].text);
       // Keys name each block so a manual page break can sit before it.
       // level 1 = a sub-bullet under the bullet above it.
