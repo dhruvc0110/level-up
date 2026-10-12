@@ -57,6 +57,7 @@
     tagging:  { label: 'Linking proof to personas',   def: 'haiku',  typical: { in: 9000,  out: 1500 } },
     lens:     { label: 'Persona strength and gaps',   def: 'sonnet', typical: { in: 8000,  out: 1800 } },
     outreach: { label: 'Outreach notes',              def: 'sonnet', typical: { in: 6000,  out: 900 } },
+    documents: { label: 'Resumes and cover letters',  def: 'sonnet', typical: { in: 12000, out: 3500 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {
@@ -489,13 +490,14 @@
     });
     return made.id;
   }
-  // Uploads a file the user picked into Level Up/<subfolder>/ and returns { id, url }.
-  async function uploadToDriveFolder(file, subfolder) {
+  // Uploads a file into Level Up/<subfolder>/ and returns { id, url }.
+  // opts.convertTo (e.g. Google Docs) makes Drive convert it; opts.name renames it.
+  async function uploadToDriveFolder(file, subfolder, opts) {
     if (LOCAL_MODE) return { id: null, url: null };
     const root = await driveFolder(CONFIG.folderName);
     const folderId = subfolder ? await driveFolder(subfolder, root) : root;
     const boundary = 'lu' + Math.random().toString(36).slice(2);
-    const meta = JSON.stringify({ name: file.name, parents: [folderId] });
+    const meta = JSON.stringify(Object.assign({ name: (opts && opts.name) || file.name, parents: [folderId] }, opts && opts.convertTo ? { mimeType: opts.convertTo } : {}));
     const body = new Blob([
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`,
       file, `\r\n--${boundary}--`,

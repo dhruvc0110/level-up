@@ -5,6 +5,7 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete }) {
   const [generating, setGenerating] = React.useState(false);
   const [instruction, setInstruction] = React.useState('');
   const [error, setError] = React.useState(null);
+  const [docTab, setDocTab] = React.useState('outreach'); // outreach | resume | letter
   const O = window.LU_OUTREACH;
   const people = O ? O.recipients(opp) : [];
   const hasSent = (opp.drafts || []).some((d) => d.sentAt);
@@ -63,22 +64,40 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete }) {
         <DetailHeader opp={opp} onClose={onClose} onDelete={onDelete}/>
         <DetailStageRow opp={opp} onUpdate={onUpdate}/>
 
-        {/* Split-pane body */}
-        <div style={{
-          flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr',
-          minHeight: 0,
-        }}>
-          <DetailContext opp={opp} onUpdate={onUpdate}/>
-          <DetailDrafts opp={opp} onUpdate={onUpdate} generating={generating} error={error}/>
+        {/* Documents for this job: Outreach, Resume, Cover letter */}
+        <div style={{ display: 'flex', gap: 2, padding: '0 28px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto' }}>
+          {[['outreach', 'Outreach'], ['resume', 'Resume'], ['letter', 'Cover letter']].map(([k, l]) => (
+            <button key={k} onClick={() => setDocTab(k)} style={{
+              appearance: 'none', cursor: 'pointer', padding: '10px 12px', fontSize: 13, border: 'none', background: 'transparent',
+              color: docTab === k ? 'var(--ink-1)' : 'var(--ink-3)', borderBottom: '2px solid ' + (docTab === k ? 'var(--ink-1)' : 'transparent'),
+            }}>{l}{k === 'resume' && opp.docs && opp.docs.resume && (opp.docs.resume.versions || []).length ? ` (${opp.docs.resume.versions.length})` : ''}{k === 'letter' && opp.docs && opp.docs.letter && (opp.docs.letter.versions || []).length ? ` (${opp.docs.letter.versions.length})` : ''}</button>
+          ))}
         </div>
 
-        {/* Bottom instruction bar */}
-        <DetailInstructionBar
-          instruction={instruction} setInstruction={setInstruction}
-          type={type} setType={setType} people={people} toKey={toKey} setToKey={pickTo}
-          onGenerate={generate} generating={generating}
-          hasDrafts={(opp.drafts || []).some((d) => d.type === type)}
-        />
+        {docTab === 'outreach' ? (<>
+          {/* Split-pane body */}
+          <div style={{
+            flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr',
+            minHeight: 0,
+          }}>
+            <DetailContext opp={opp} onUpdate={onUpdate}/>
+            <DetailDrafts opp={opp} onUpdate={onUpdate} generating={generating} error={error}/>
+          </div>
+
+          {/* Bottom instruction bar */}
+          <DetailInstructionBar
+            instruction={instruction} setInstruction={setInstruction}
+            type={type} setType={setType} people={people} toKey={toKey} setToKey={pickTo}
+            onGenerate={generate} generating={generating}
+            hasDrafts={(opp.drafts || []).some((d) => d.type === type)}
+          />
+        </>) : (
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {typeof ResumeWorkspace === 'function'
+              ? (docTab === 'resume' ? <ResumeWorkspace opp={opp} onUpdate={onUpdate}/> : <LetterWorkspace opp={opp} onUpdate={onUpdate}/>)
+              : <div style={{ padding: 28, color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load documents.</div>}
+          </div>
+        )}
       </div>
 
       <style>{`
