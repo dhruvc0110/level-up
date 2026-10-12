@@ -237,11 +237,21 @@ function FitStars({ value = 0, size = 11, interactive = false, onChange }) {
 }
 
 // ── Due date chip ──────────────────────────────────────────────────────────
+// "2026-10-12" as a local calendar day (new Date() would read it as UTC).
+function parseDay(str) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str || ''));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(str);
+}
+
 function dueState(dueDateStr) {
   if (!dueDateStr) return null;
-  const today = window.LU_TODAY;
-  const d = new Date(dueDateStr);
-  const t = new Date(today);
+  // Compare calendar days in local time: "2026-10-12" parsed as-is is UTC
+  // midnight, which reads as the day before anywhere west of London.
+  const d = parseDay(dueDateStr);
+  if (isNaN(d)) return null;
+  d.setHours(0, 0, 0, 0);
+  const t = new Date(window.LU_TODAY || Date.now());
+  t.setHours(0, 0, 0, 0);
   const diffDays = Math.round((d - t) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return { kind: 'overdue', days: diffDays, label: `${-diffDays}d overdue` };
   if (diffDays === 0) return { kind: 'today', days: 0, label: 'Today' };
@@ -600,6 +610,7 @@ function NetworkAt({ company, hiringManager }) {
 }
 
 Object.assign(window, {
+  parseDay,
   Icon, PersonaTag, PersonaDot, stageColor, StageBar,
   FitStars, DueChip, dueState, WarmthDot,
   Btn, Field, TextInput, TextArea, Select,

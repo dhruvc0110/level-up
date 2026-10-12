@@ -66,12 +66,14 @@ function App() {
 
   function pushNav(partial) {
     const next = { ...navRef.current, ...partial };
+    navRef.current = next; // two calls in one click must see each other's changes
     window.history.pushState({ lu: next }, '', hashForNav(next));
     applyNav(next);
   }
 
   function replaceNav(partial) {
     const next = { ...navRef.current, ...partial };
+    navRef.current = next; // two calls in one click must see each other's changes
     window.history.replaceState({ lu: next }, '', hashForNav(next));
     applyNav(next);
   }
@@ -127,7 +129,10 @@ function App() {
   // Each one pushes ONE history entry. Children call these instead of
   // touching state directly so back-gesture behavior stays consistent.
   const navToView = (v) => pushNav({ view: v, openOppId: null, addOpen: false, curatorPersonaId: null });
-  const navOpenOpp = (id) => pushNav({ openOppId: id });
+  // Opportunities open in the Pipeline, beside the list. Picking another row
+  // there replaces the history entry so Back leaves the Pipeline in one step.
+  const navOpenOpp = (id) => pushNav({ view: 'pipeline', openOppId: id, addOpen: false, curatorPersonaId: null });
+  const navSelectOpp = (id) => replaceNav({ openOppId: id });
   const navCloseOpp = () => pushNav({ openOppId: null });
   const navOpenAdd = () => pushNav({ addOpen: true });
   const navCloseAdd = () => pushNav({ addOpen: false });
@@ -145,7 +150,7 @@ function App() {
   const addOpp = (newOpp) => {
     setOpportunities(arr => [newOpp, ...arr]);
     // Close Add modal + open the new opp's detail panel in one history entry
-    pushNav({ openOppId: newOpp.id, addOpen: false });
+    pushNav({ view: 'pipeline', openOppId: newOpp.id, addOpen: false });
     LU_API.put('/api/opportunities/' + newOpp.id, newOpp)
       .catch(e => console.error('[Level Up] addOpp failed:', e));
   };
@@ -177,7 +182,8 @@ function App() {
         )}
         {view === 'pipeline' && (
           <PipelineView opportunities={opportunities}
-            onOpen={navOpenOpp} onAdd={navOpenAdd}
+            selectedId={openOppId} onSelect={navSelectOpp} onAdd={navOpenAdd}
+            onUpdate={updateOpp} onDelete={deleteOpp}
             density={t.density}/>
         )}
         {view === 'inbox' && (
@@ -212,7 +218,7 @@ function App() {
         )}
       </div>
 
-      {openOpp && (
+      {openOpp && view !== 'pipeline' && (
         <DetailPanel opp={openOpp} onClose={navCloseOpp}
           onUpdate={updateOpp}
           onDelete={() => deleteOpp(openOpp.id)}/>
@@ -238,7 +244,7 @@ function App() {
         </TweakSection>
 
         <TweakSection label="Density">
-          <TweakRadio label="Kanban cards" value={t.density}
+          <TweakRadio label="Pipeline rows" value={t.density}
             options={['compact', 'regular', 'comfy']}
             onChange={(v) => setTweak('density', v)}/>
         </TweakSection>

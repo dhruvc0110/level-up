@@ -227,6 +227,14 @@
       if (!Array.isArray(doc.career[k])) doc.career[k] = [];
     });
     if (!doc.career.person || typeof doc.career.person !== 'object') doc.career.person = {};
+    // Opportunities carry the date they were added (back-filled from the Inbox, or the id's timestamp).
+    doc.opportunities.forEach((o) => {
+      if (o.addedAt) return;
+      const t = doc.triage.find((r) => r.opportunityId === o.id);
+      const m = /^op-g([0-9a-z]+)$/.exec(o.id || '');
+      const ms = m ? parseInt(m[1], 36) : NaN;
+      o.addedAt = (t && (t.triagedAt || t.createdAt)) || (ms > 1.5e12 && ms < 4e12 ? new Date(ms).toISOString() : null);
+    });
     // A brief left "researching" by a closed tab should be retried.
     Object.keys(doc.companies).forEach((k) => { if (doc.companies[k].status === 'researching') doc.companies[k].status = 'error'; });
     return doc;
@@ -632,8 +640,13 @@ Output a SINGLE JSON object, no prose around it:
   "persona": ${personaEnum()} | null,
   "fit": 1-5 | null,
   "next_action": "short phrase" | null,
-  "notes": "additional context" | null
+  "notes": "additional context" | null,
+  "location": "Boston, MA" | null,
+  "workplace": "On-site" | "Hybrid" | "Remote" | null,
+  "compensation": "pay as stated, e.g. $350-420k base + bonus" | null
 }
+
+location, workplace and compensation only if the email states them; never guess.
 
 If is_opportunity is false, set all other fields to null except reasoning.`;
 
@@ -761,7 +774,8 @@ Output a SINGLE JSON object, no prose around it:
   "location": "Boston, MA" | null,
   "workplace": "On-site" | "Hybrid" | "Remote" | null,
   "company_size": "your best estimate, e.g. 1,001-5,000 employees" | null,
-  "industry": "e.g. Hospital & Health Care" | null
+  "industry": "e.g. Hospital & Health Care" | null,
+  "compensation": "pay range if the card shows one, e.g. $250K/yr - $300K/yr" | null
 }
 
 company_size and industry come from what you know about the company; use null if you don't recognise it.`;
@@ -821,7 +835,7 @@ company_size and industry come from what you know about the company; use null if
         row.enrichment = {
           partial: true, location: d.location || null, workplace: d.workplace || null,
           companySize: d.company_size || null, companySizeEstimated: true, industry: d.industry || null,
-          summary: null, hiringManager: null, companyUrl: null, jobUrl, enrichedAt: nowIso(),
+          compensation: d.compensation || null, summary: null, hiringManager: null, companyUrl: null, jobUrl, enrichedAt: nowIso(),
         };
       } catch (e) {
         const g = guessFromCard(lines);
@@ -854,6 +868,7 @@ Output a SINGLE JSON object, no prose around it:
   "company_size": "1,001-5,000 employees" | null,
   "company_size_estimated": true | false,
   "industry": "Hospital & Health Care" | null,
+  "compensation": "pay range as the page states it, e.g. $250K/yr - $300K/yr" | null,
   "hiring_manager": { "name": "...", "title": "...", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null } | null,
   "reach_out": [ { "name": "...", "title": "short headline", "profile_url": "...", "degree": "1st"|"2nd"|"3rd"|null, "reason": "e.g. Company alum from Cognizant / Partner at the company" } ],
   "reach_out_note": "summary line LinkedIn shows without names, e.g. School alumni from IIM Lucknow" | null,
@@ -925,7 +940,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       reachOut, reachOutNote: d.reach_out_note || null,
       location: d.location || null, workplace: d.workplace || null,
       companySize: d.company_size || null, companySizeEstimated: !!d.company_size_estimated,
-      industry: d.industry || null, summary: d.summary || null, companyUrl, jobUrl,
+      industry: d.industry || null, compensation: d.compensation || null, summary: d.summary || null, companyUrl, jobUrl,
       hiringManager: hm ? { name: hm.name, title: hm.title || '', url: hm.profile_url || null, degree: hm.degree || null } : null,
       enrichedAt: nowIso(),
     };
@@ -1305,7 +1320,10 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     markDirty();
     // Career profile re-links its proof when a persona is added or redefined.
     if (coll === 'personas') window.dispatchEvent(new CustomEvent('lu:persona-saved', { detail: { prev, next: item } }));
-    if (coll === 'opportunities') notifyOpportunities();
+    if (coll === 'opportunities') {
+      if (!item.addedAt) item.addedAt = (prev && prev.addedAt) || nowIso();
+      notifyOpportunities();
+    }
     return item;
   }
   function remove(coll, id) {
@@ -1359,6 +1377,9 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
         };
         if (row.jobUrl && !opp.notes.includes(row.jobUrl)) opp.notes = (opp.notes ? opp.notes + '\n\n' : '') + 'LinkedIn: ' + row.jobUrl;
         if (row.enrichment) opp.enrichment = row.enrichment;
+        const pr = row.parsed || {};
+        ['location', 'workplace', 'compensation'].forEach((k) => { if (!opp[k] && pr[k] && !(row.enrichment && row.enrichment[k])) opp[k] = pr[k]; });
+        opp.addedAt = nowIso();
         DOC.opportunities.unshift(opp);
         row.triageStatus = 'accepted'; row.opportunityId = opp.id; row.triagedAt = nowIso();
         markDirty(); notifyOpportunities();

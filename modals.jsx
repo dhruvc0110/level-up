@@ -42,7 +42,8 @@ function ModalShell({ children, onClose, width = 560 }) {
 function AddOpportunityModal({ onClose, onSave }) {
   const [form, setForm] = React.useState({
     company: '', role: '',
-    persona: 'cio', source: '',
+    persona: ((window.activePersonas ? window.activePersonas() : window.LU_PERSONAS)[0] || {}).id || null, source: '',
+    location: '', workplace: '', compensation: '',
     contactName: '', contactTitle: '', contactWarmth: 'cold',
     nextAction: '', dueDate: '',
     fit: 3,
@@ -58,6 +59,8 @@ function AddOpportunityModal({ onClose, onSave }) {
       company: form.company, role: form.role,
       stage: 'discovered', persona: form.persona,
       fit: form.fit, source: form.source || 'Inbound',
+      location: form.location || null, workplace: form.workplace || null, compensation: form.compensation || null,
+      addedAt: new Date().toISOString(),
       contact: form.contactName ? { name: form.contactName, title: form.contactTitle, warmth: form.contactWarmth } : null,
       nextAction: form.nextAction || 'Initial research',
       dueDate: form.dueDate || (() => { const d = new Date(window.LU_TODAY); d.setDate(d.getDate() + 3); return d.toISOString().slice(0,10); })(),
@@ -108,6 +111,16 @@ function AddOpportunityModal({ onClose, onSave }) {
           <Field label="Source">
             <TextInput value={form.source} onChange={(v) => upd('source', v)}
               placeholder="e.g. Spencer Stuart, Inbound, Personal network"/>
+          </Field>
+          <Field label="Location">
+            <TextInput value={form.location} onChange={(v) => upd('location', v)} placeholder="e.g. Boston, MA"/>
+          </Field>
+          <Field label="Work mode">
+            <Select value={form.workplace} onChange={(v) => upd('workplace', v)}
+              options={[{ value: '', label: 'Not set' }, 'Remote', 'Hybrid', 'On-site']}/>
+          </Field>
+          <Field label="Compensation" style={{ gridColumn: 'span 2' }}>
+            <TextInput value={form.compensation} onChange={(v) => upd('compensation', v)} placeholder="e.g. $350–420k base + bonus"/>
           </Field>
           <Field label="Fit score" style={{ gridColumn: 'span 2' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0' }}>

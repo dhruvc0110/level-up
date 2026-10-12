@@ -109,26 +109,34 @@ const GUIDE_CHAPTERS = [
   {
     id: 'pipeline', title: 'Pipeline & opportunities', blurb: 'Track every role from discovered to decision',
     body: () => <>
-      <GP>Each opportunity moves through five stages: <B>Discovered → Evaluating → Applied → In Conversations → Decision</B>.</GP>
-      <GShot src="pipeline.jpg" caption="Pipeline: drag a card to another column to change its stage."/>
+      <GP>The Pipeline is one page: a list of your opportunities on the left and the one you pick on the right. Stage is one of its details: <B>Discovered → Evaluating → Applied → In Conversations → Decision</B>.</GP>
+      <GShot src="pipeline.jpg" caption="Pipeline: search and filter the list; the selected opportunity opens beside it."/>
+      <GH>Find an opportunity</GH>
+      <GList items={[
+        <><B>Search</B> looks through company, role, notes, next action, contacts, the people on the LinkedIn job, location and pay.</>,
+        <><B>Filters</B>: Stage (or <B>Active</B> for stages 01–04), Persona, Fit, Location, Work mode, Source and Due (overdue, within 7 days, no date). They combine, and the list says how many match; <B>Clear filters</B> resets them. Level Up remembers your filters next time.</>,
+        <>The <B>stage counts</B> at the top show your pipeline's shape; click one to show only that stage, and again to undo.</>,
+        <><B>Sort</B> by next due, best fit, newest, furthest stage or company.</>,
+      ]}/>
       <GH>Add an opportunity</GH>
       <GList items={[
         <><B>From the Inbox</B> (most common): accept an email or LinkedIn job. See <i>Inbox</i>.</>,
         <><B>By hand</B>: <B>New opportunity</B> (top right of Dashboard or Pipeline). Use this for leads from calls, dinners or referrals.</>,
       ]}/>
       <GH>Open an opportunity</GH>
-      <GP>Click a card. The panel shows everything about the role:</GP>
-      <GShot src="opportunity.jpg" caption="Opportunity panel: company profile, job details and the people you can reach out to."/>
+      <GP>Click a row. Its <B>Overview</B> tab shows everything about the role:</GP>
+      <GShot src="opportunity.jpg" caption="Overview: key facts, company profile, job details and the people you can reach out to."/>
       <GList items={[
-        <><B>Stage</B> buttons along the top, plus <B>Persona</B> and <B>Fit score</B>.</>,
+        <><B>Stage</B> (the coloured button under the title, or in Key facts) changes the stage.</>,
+        <><B>Key facts</B>: Stage, Persona, Fit, Location, Work mode, Compensation, Industry, Company size, Source, Next action with its due date, and the date it was <B>Added</B>. All editable; these are what the list filters on. LinkedIn jobs fill location, work mode, industry and size for you, and pay when the posting shows it.</>,
         <><B>Company</B>: a web-researched profile (see <i>Company profiles</i>).</>,
-        <><B>Job details</B>: location, size, industry, hiring manager and <B>People you can reach out to</B> on LinkedIn.</>,
-        <><B>People you know at …</B>: your own contacts at that company.</>,
-        <><B>Source, Key contact, Next action</B> (with due date) and <B>Notes</B>: all editable.</>,
+        <><B>Job details</B>: hiring manager and <B>People you can reach out to</B> on LinkedIn.</>,
+        <><B>People you know at …</B>, <B>Key contact</B> and <B>Notes</B>.</>,
+        <><B>Wider view</B> hides the list for more room (useful on the Resume tab); <B>Show list</B> brings it back. On a narrow window you see the list or the opportunity, with <B>Back to list</B>.</>,
         <><B>Archive</B> (top right) removes it from the pipeline.</>,
       ]}/>
       <GH>Outreach notes</GH>
-      <GP>The right side of the panel drafts notes for this role. Claude writes from the job, the company profile, the person, your persona's angle and the Career profile proof linked to that persona. It never invents anything and never sends: you copy the note and send it yourself.</GP>
+      <GP>The <B>Outreach</B> tab drafts notes for this role. Claude writes from the job, the company profile, the person, your persona's angle and the Career profile proof linked to that persona. It never invents anything and never sends: you copy the note and send it yourself.</GP>
       <GShot src="outreach.jpg" caption="Outreach: a hiring-manager note with what to check before sending and the proof it is based on." width={760}/>
       <GSteps items={[
         <>In the bar at the bottom, pick <B>who it's for</B> (the key contact, the hiring manager, people you can reach out to, or your own contacts there). Level Up suggests the kind of note.</>,
@@ -138,7 +146,7 @@ const GUIDE_CHAPTERS = [
         <>Copy it, send it from your own email or LinkedIn, then click <B>Mark as sent</B>. That sets the next action to "Follow up with …" due in 7 days, and records the achievements you used (for tailoring resumes later). Next time, Level Up suggests a <B>Follow-up</B> that adds something new.</>,
       ]}/>
       <GH>Resume and cover letter</GH>
-      <GP>Each opportunity has three tabs: <B>Outreach</B>, <B>Resume</B> and <B>Cover letter</B>. Everything you make for a job stays with that job.</GP>
+      <GP>Next to Overview, each opportunity has <B>Outreach</B>, <B>Resume</B> and <B>Cover letter</B> tabs. Everything you make for a job stays with that job.</GP>
       <GShot src="resume.jpg" caption="Resume tab: format and content on the left, a live page preview with a fit check on the right." width={760}/>
       <GSteps items={[
         <>Open the <B>Resume</B> tab, choose 1 or 2 pages and click <B>Tailor with Claude</B> (about 3–5¢, under a minute). Claude reads the job, the company profile, your persona and your whole Career profile.</>,
@@ -412,6 +420,7 @@ const GUIDE_CHAPTERS = [
         ["Gmail sync says the label wasn't found", <>Create the Gmail label <B>LevelUp</B> (see <i>Gmail: labelling emails</i>).</>],
         ["A resume won't import", <>Use PDF or Word <B>.docx</B> (old .doc files can't be read). Very long documents may need splitting.</>],
         ["Claude costs more than expected", <>Open <B>Settings → Claude models & usage</B> to see which job spends the most, then switch it to <B>Haiku</B>. Company profiles also pay 1¢ per web search.</>],
+        ["An opportunity is missing from the Pipeline list", <>A filter or search is probably hiding it: the list says how many are shown. Click <B>Clear filters</B>.</>],
         ["I see an old version after an update", <>Press <K>Cmd</K> + <K>Shift</K> + <K>R</K> once.</>],
       ].map(([q, a], i) => (
         <div key={i} style={{ padding: '12px 0', borderTop: i ? '1px solid var(--line-1)' : 'none' }}>
@@ -426,6 +435,8 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['12 Oct 2026', [
+          'Pipeline is now a searchable list with the selected opportunity beside it, instead of stage columns. Stage is a detail you change on the opportunity. New key facts (location, work mode, compensation, industry, company size, date added) can be filtered, alongside stage, persona, fit, source and due date. Existing opportunities got their date added from the Inbox where it was known.',
+          'Fixed: due dates showed one day early (an item due today said "1d overdue"). Adding an opportunity by hand now opens it straight away.',
           'Resume formatting: eight templates (Classic, Executive, Modern, Minimal, Banner, Sidebar, Compact, Board bio), font pairings, text size, colour, margins and spacing, Fit to pages, section order and headings, date and bullet styles, and a saved look per persona. Cover letters share the resume\u2019s look and tailored headline.',
           'Resumes and cover letters: every opportunity now has Resume and Cover letter tabs next to Outreach. Claude tailors a resume from your Career profile, you choose and edit, pick a template, check the fit, and create a Google Doc in your Drive.',
           'Personas: the voice preview is now written by Claude in each persona\u2019s voice (click Preview; about 1¢), so you can hear what your settings change. Outreach notes now also use the sentence rhythm and your writing samples.',

@@ -84,7 +84,7 @@ function DashboardHeader({ opps, onAdd }) {
     const k = dueState(o.dueDate)?.kind;
     if (k === 'today') return true;
     if (!o.dueDate || k === 'overdue') return false;
-    const days = (new Date(o.dueDate) - now) / 86400000;
+    const days = dueState(o.dueDate)?.days;
     return days >= 0 && days <= 7;
   }).length;
   const NUM = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
@@ -307,7 +307,7 @@ function ThisWeekModule({ opps, onOpen }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {upcoming.map((o, i) => {
-            const d = new Date(o.dueDate);
+            const d = parseDay(o.dueDate);
             const dayName = days[(d.getDay() + 6) % 7];
             const dayNum = d.getDate();
             return (
