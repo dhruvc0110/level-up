@@ -159,6 +159,7 @@ const GUIDE_CHAPTERS = [
         <><B>Save as P-01's look</B> (your persona's code) stores the format with the persona, so every new resume for that persona starts with it.</>,
         <>Click <B>Create Google Doc</B>. Level Up builds the document and saves it in <B>Level Up / Documents</B> in your Drive, then opens it. Edit it there, or use File → Download for Word or PDF. Each one is listed under <B>Versions</B>; click <B>Mark as sent</B> when it goes out.</>,
       ]}/>
+      <GShot src="resume-pages.jpg" caption="The pages as they'll print: a sub-bullet (–), your own bullet with its toolbar showing, and page 2 starting where you added a break." width={520}/>
       <GP><B>Cover letter</B> works the same way: <B>Draft with Claude</B> (about 2¢) writes 250–350 words from the job, the company and your strongest proof, in your persona's voice. Edit the paragraphs, revise with an instruction ("shorter", "warmer"), then <B>Create Google Doc</B>. It uses the same header as your resume.</GP>
       <GTip><B>Send PDFs.</B> In the Google Doc use File → Download → PDF: the fonts stay exact. A Word download can look different on a computer without those fonts.</GTip>
       <GTip>School-level education is left off resumes automatically. The page count in the preview is a close estimate; the Google Doc may differ by a line or two.</GTip>
