@@ -63,7 +63,11 @@ function PersonaCurator({ persona, onClose, onSave }) {
   const [previews, setPreviews] = React.useState({}); // scenario -> { text, sig }
   const [previewError, setPreviewError] = React.useState(null);
   const O = window.LU_OUTREACH;
-  const sigNow = O && O.voiceSig ? O.voiceSig(draft, scenario) : '';
+  // Voice check runs against one of this persona's real opportunities (or a typical role).
+  const personaOpps = (window.LU_OPPORTUNITIES || []).filter((o) => o.persona === draft.id);
+  const [checkOppId, setCheckOppId] = React.useState(() => (personaOpps[0] ? personaOpps[0].id : ''));
+  const checkOpp = personaOpps.find((o) => o.id === checkOppId) || null;
+  const sigNow = O && O.voiceSig ? O.voiceSig(draft, scenario, checkOpp) : '';
   const shown = previews[scenario];
   const regeneratePreview = async () => {
     if (!O || !O.previewVoice) { setPreviewError('Refresh the page (Cmd+Shift+R) to load the preview.'); return; }
@@ -71,7 +75,7 @@ function PersonaCurator({ persona, onClose, onSave }) {
     setPreviewGenerating(true); setPreviewError(null);
     const sig = sigNow, sc = scenario;
     try {
-      const text = await O.previewVoice(draft, sc);
+      const text = await O.previewVoice(draft, sc, checkOpp);
       setPreviews((m) => ({ ...m, [sc]: { text, sig } }));
     } catch (e) { setPreviewError(String(e.message || e).slice(0, 160)); }
     finally { setPreviewGenerating(false); }
@@ -187,6 +191,7 @@ function PersonaCurator({ persona, onClose, onSave }) {
             <PreviewPane draft={draft}
               scenario={scenario} setScenario={setScenario}
               text={shown ? shown.text : ''} stale={!!shown && shown.sig !== sigNow} error={previewError}
+              opps={personaOpps} oppId={checkOppId} setOppId={setCheckOppId}
               generating={previewGenerating}
               onRegenerate={regeneratePreview}/>
           </div>
@@ -473,7 +478,7 @@ function SamplesEditor({ value, onChange }) {
 }
 
 // ── Preview pane (right side) ──────────────────────────────────────────
-function PreviewPane({ draft, scenario, setScenario, text, stale, error, generating, onRegenerate }) {
+function PreviewPane({ draft, scenario, setScenario, text, stale, error, generating, onRegenerate, opps, oppId, setOppId }) {
   return (
     <>
       <div style={{
@@ -481,7 +486,7 @@ function PreviewPane({ draft, scenario, setScenario, text, stale, error, generat
         borderBottom: '1px solid var(--line-1)',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div className="eyebrow">Voice preview</div>
+          <div className="eyebrow">Voice check</div>
           <button onClick={onRegenerate} style={{
             appearance: 'none', background: 'transparent', border: 'none',
             color: 'var(--ink-3)', fontSize: 11.5, cursor: 'pointer',
@@ -496,8 +501,14 @@ function PreviewPane({ draft, scenario, setScenario, text, stale, error, generat
         <div className="serif-italic" style={{
           fontSize: 14, color: 'var(--ink-3)', marginBottom: 14,
         }}>
-          Written by Claude in this persona's voice, from your Career profile. Change the settings, then click Preview (about 1¢).
+          Hear this persona on a real opportunity before you save. Nothing is kept: real notes and documents are written inside each opportunity. About 1¢ per check.
         </div>
+
+        <select aria-label="Opportunity to test against" value={oppId} onChange={(e) => setOppId(e.target.value)}
+          style={{ width: '100%', height: 30, marginBottom: 10, padding: '0 8px', background: 'var(--bg-0)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, fontSize: 12.5 }}>
+          <option value="">A typical role for this persona</option>
+          {(opps || []).map((o) => <option key={o.id} value={o.id}>{o.role} · {o.company}</option>)}
+        </select>
 
         {/* Scenario selector */}
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -593,7 +604,6 @@ function FpStat({ label, value, valueText }) {
   );
 }
 
-// ── Voice preview composition (mock) ────────────────────────────────────
 function computeCompleteness(d) {
   let score = 0;
   if (d.name) score += 8;

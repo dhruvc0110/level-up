@@ -272,8 +272,8 @@ const GUIDE_CHAPTERS = [
         <><B>Retire</B> (on each card) takes a persona out of new job matching and your Career profile. Past jobs keep their label. It moves to <B>Retired personas</B> at the bottom, where <B>Bring back</B> restores it.</>,
       ]}/>
       <GTip>Keep each persona's <B>positioning</B>, <B>skills</B> and <B>sectors</B> true to you: Claude matches jobs and links your proof against exactly those words.</GTip>
-      <GH>Hear the voice before you save</GH>
-      <GP>The curator's <B>Voice preview</B> (right side) is written by Claude in this persona's voice from your Career profile. Pick a scenario (recruiter outreach, cold email to a CEO, LinkedIn post opener, short bio) and click <B>Preview</B> (about 1¢). Change tone, rhythm, words to use or avoid, or paste writing samples, and the preview says <B>Settings changed</B>: click <B>Regenerate</B> to hear the difference.</GP>
+      <GH>Voice check: hear the persona before you save</GH>
+      <GP>The curator's <B>Voice check</B> (right side) shows how this persona sounds on a real job. Choose one of the persona's opportunities (or <B>A typical role</B>), pick a scenario (recruiter reply, cold email, LinkedIn post opener, short bio) and click <B>Preview</B> (about 1¢). Change tone, rhythm, words or writing samples and it says <B>Settings changed</B>: click <B>Regenerate</B> to hear the difference. Nothing is kept: real notes, and later resumes and cover letters, are written inside each opportunity.</GP>
       <GTip>Every voice setting, including rhythm and your writing samples, is also used for real outreach notes. Writing samples have the biggest effect: paste one to three paragraphs you've actually written in this voice.</GTip>
     </>,
   },
@@ -412,6 +412,7 @@ const GUIDE_CHAPTERS = [
       {[
         ['12 Oct 2026', [
           'Personas: the voice preview is now written by Claude in each persona\u2019s voice (click Preview; about 1¢), so you can hear what your settings change. Outreach notes now also use the sentence rhythm and your writing samples.',
+          'Personas: the preview is now a Voice check you run against one of the persona\u2019s real opportunities. Job documents stay in the opportunity; resumes and cover letters will join Outreach there.',
         ]],
         ['11 Oct 2026', [
           'Outreach notes are real now: in any opportunity, pick the person and the kind of note (recruiter reply, hiring-manager note, warm-intro request with a forwardable blurb, follow-up, LinkedIn note) and Claude drafts it from your Career profile. Mark as sent sets a 7-day follow-up.',

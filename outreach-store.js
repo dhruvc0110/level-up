@@ -153,11 +153,18 @@ Output a single JSON object and nothing else:
     linkedin: 'The opening of a LinkedIn post (first 2 to 4 lines, under 300 characters) on a theme from the proof that suits this persona. No hashtags.',
     bio: 'A short professional bio paragraph in the first person for this persona, 70 to 100 words.',
   };
-  function voiceSig(persona, scenario) {
-    return JSON.stringify([scenario, persona.name, persona.positioning, persona.tone, persona.toneDescriptors, persona.rhythm, persona.useWords, persona.avoidWords, persona.writingSamples, persona.companySize, persona.targetSectors, persona.skills]);
+  function voiceSig(persona, scenario, opp) {
+    return JSON.stringify([scenario, opp ? opp.id : null, persona.name, persona.positioning, persona.tone, persona.toneDescriptors, persona.rhythm, persona.useWords, persona.avoidWords, persona.writingSamples, persona.companySize, persona.targetSectors, persona.skills]);
   }
-  async function previewVoice(persona, scenario) {
-    const task = PREVIEWS[scenario] || PREVIEWS.recruiter;
+  // With an opportunity, the check is persona × that real job; without one, a typical role.
+  async function previewVoice(persona, scenario, opp) {
+    let task = PREVIEWS[scenario] || PREVIEWS.recruiter;
+    if (opp && scenario === 'recruiter') task = 'A reply to an executive search partner who has approached the sender about the ROLE below. 110 to 150 words, with a subject line.';
+    if (opp && scenario === 'cold') task = 'A cold email to the senior executive hiring for the ROLE below, proposing a conversation. 100 to 140 words, with a subject line.';
+    const e = (opp && opp.enrichment) || {};
+    const brief = opp && window.LU_COMPANY ? window.LU_COMPANY(opp.company) : null;
+    const roleBlock = opp ? [`ROLE: ${opp.role || '?'} at ${opp.company || '?'}`, e.summary, opp.notes && 'Notes: ' + String(opp.notes).slice(0, 800),
+      brief && brief.status === 'ok' && 'COMPANY PROFILE: ' + [brief.whatTheyDo, ...(brief.recent || []).map((r) => 'Recent: ' + r)].filter(Boolean).join(' ')].filter(Boolean).join('\n') : null;
     const person = career().person || {};
     const proof = proofFor(persona.id).slice(0, 8);
     const user = [
@@ -165,6 +172,7 @@ Output a single JSON object and nothing else:
       `PERSONA: ${persona.name || 'Untitled'}. ${persona.positioning || ''}`,
       [persona.companySize && 'Target company size: ' + persona.companySize, (persona.targetSectors || []).length && 'Target sectors: ' + persona.targetSectors.join(', '), (persona.skills || []).length && 'Skills to lead with: ' + persona.skills.join(', ')].filter(Boolean).join('\n'),
       voiceBlock(persona),
+      roleBlock,
       'PROOF (from the sender\'s career record; use only these):\n' + (proof.length ? proof.map((p, i) => `P${i}: ${p.a.text}${(p.a.metrics || []).length ? ' [numbers: ' + p.a.metrics.map((m) => m.value).join(', ') + ']' : ''}`).join('\n') : '(none recorded yet)'),
       'Task: ' + task + ' Where a company or person would be named, use a natural placeholder such as [Company] or [Name].',
     ].filter(Boolean).join('\n\n');
