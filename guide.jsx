@@ -144,10 +144,13 @@ const GUIDE_CHAPTERS = [
         <>Open the <B>Resume</B> tab, choose 1 or 2 pages and click <B>Tailor with Claude</B> (about 3–5¢, under a minute). Claude reads the job, the company profile, your persona and your whole Career profile.</>,
         <>It proposes a <B>headline</B>, a <B>summary</B>, and which achievements to show under each role, most relevant first, with wording tightened for this job (facts never change; hover a line or click <B>Original</B> to see your own words). Older roles can be <B>Title line only</B> or <B>Leave out</B>.</>,
         <>Tick or untick lines and edit any of them. <B>Job match</B> shows what the role asks for (✓ covered, ◐ partly, ▲ gap) and <B>Check before sending</B> lists what to verify.</>,
-        <>Choose the look: <B>Classic</B>, <B>Modern</B> or <B>Board bio</B>, length, spacing, font, accent colour and paper size, and which contact details and sections to show. The preview updates as you go and says whether it fits (for example "About 2 lines over 1 page").</>,
+        <>Choose the look from eight templates: <B>Classic</B>, <B>Executive</B> (centred header), <B>Modern</B>, <B>Minimal</B>, <B>Banner</B> (coloured name block), <B>Sidebar</B> (two columns), <B>Compact</B> (dense one-pager) and <B>Board bio</B> (profile, selected achievements, short career history). A dot marks the two that suit emailing better than online applications. Then set fonts (pairs that Google Docs also has), text size, margins and colour. The preview updates as you go and says whether it fits (for example "About 2 lines over 1 page"); <B>Fit to 1 page</B> (or 2) tightens spacing, margins and then text size step by step until it fits.</>,
+        <><B>More options</B>: line and section spacing, paper size, dates beside or under the title, title or company first, bullet style, headings in capitals, which contact details to show, and the sections: reorder them (↑ ↓), rename a heading (for example "Selected achievements") or hide one.</>,
+        <><B>Save as P-01's look</B> (your persona's code) stores the format with the persona, so every new resume for that persona starts with it.</>,
         <>Click <B>Create Google Doc</B>. Level Up builds the document and saves it in <B>Level Up / Documents</B> in your Drive, then opens it. Edit it there, or use File → Download for Word or PDF. Each one is listed under <B>Versions</B>; click <B>Mark as sent</B> when it goes out.</>,
       ]}/>
       <GP><B>Cover letter</B> works the same way: <B>Draft with Claude</B> (about 2¢) writes 250–350 words from the job, the company and your strongest proof, in your persona's voice. Edit the paragraphs, revise with an instruction ("shorter", "warmer"), then <B>Create Google Doc</B>. It uses the same header as your resume.</GP>
+      <GTip><B>Send PDFs.</B> In the Google Doc use File → Download → PDF: the fonts stay exact. A Word download can look different on a computer without those fonts.</GTip>
       <GTip>School-level education is left off resumes automatically. The page count in the preview is a close estimate; the Google Doc may differ by a line or two.</GTip>
       <GTip>Notes follow one house style: professional and precise but not curt, warm but not flowery, articulate and to the point. Your persona adds the angle and any words to use or avoid (set in <i>Personas</i>).</GTip>
     </>,
@@ -423,6 +426,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['12 Oct 2026', [
+          'Resume formatting: eight templates (Classic, Executive, Modern, Minimal, Banner, Sidebar, Compact, Board bio), font pairings, text size, colour, margins and spacing, Fit to pages, section order and headings, date and bullet styles, and a saved look per persona. Cover letters share the resume\u2019s look and tailored headline.',
           'Resumes and cover letters: every opportunity now has Resume and Cover letter tabs next to Outreach. Claude tailors a resume from your Career profile, you choose and edit, pick a template, check the fit, and create a Google Doc in your Drive.',
           'Personas: the voice preview is now written by Claude in each persona\u2019s voice (click Preview; about 1¢), so you can hear what your settings change. Outreach notes now also use the sentence rhythm and your writing samples.',
           'Personas: the preview is now a Voice check you run against one of the persona\u2019s real opportunities. Job documents stay in the opportunity; resumes and cover letters will join Outreach there.',

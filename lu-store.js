@@ -1297,9 +1297,10 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
 
   function upsert(coll, id, body) {
     const arr = DOC[coll];
-    const item = Object.assign({}, body, { id });
     const i = arr.findIndex((x) => x.id === id);
     const prev = i >= 0 ? arr[i] : null;
+    // Personas keep fields the editor doesn't show (e.g. a saved document look).
+    const item = coll === 'personas' && prev ? Object.assign({}, prev, body, { id }) : Object.assign({}, body, { id });
     if (i >= 0) arr[i] = item; else if (coll === 'personas') arr.push(item); else arr.unshift(item);
     markDirty();
     // Career profile re-links its proof when a persona is added or redefined.

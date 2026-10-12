@@ -14,31 +14,110 @@ function Chip({ on, onClick, children }) {
 }
 
 // ── Format controls (shared) ─────────────────────────────────────────────
-function FormatControls({ format, onChange, kind }) {
-  const f = Object.assign({}, window.LU_DOCS.DEFAULT_FORMAT, format || {});
+// Web fonts for the preview, loaded once (the Google Doc uses the same families).
+function useDocFonts() {
+  React.useEffect(() => {
+    if (document.getElementById('lu-doc-fonts')) return;
+    const l = document.createElement('link');
+    l.id = 'lu-doc-fonts'; l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Montserrat:wght@400;600&family=Open+Sans:wght@400;700&family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@400;700&display=swap';
+    document.head.appendChild(l);
+  }, []);
+}
+
+function TemplateThumb({ k, f, on, onClick }) {
+  const D = window.LU_DOCS;
+  const st = D.styleFor(D.applyTemplate(f, k));
+  const c = '#' + st.color, line = (w, col) => <div style={{ height: 3, width: w + '%', background: col || '#c8c8c8', margin: '3px 0', borderRadius: 1 }}/>;
+  const lines = (n) => Array.from({ length: n }).map((_, i) => <React.Fragment key={i}>{line(55 + ((i * 37) % 40))}</React.Fragment>);
+  const head = <div style={{ fontFamily: st.headCss, fontSize: 11, color: '#' + st.nameColor, textAlign: st.center ? 'center' : 'left' }}>Name</div>;
+  const sec = (t) => <div style={{ fontFamily: st.headCss, fontSize: 6.5, color: '#' + st.headingColor, fontWeight: st.headingBold ? 700 : 400, marginTop: 5, textAlign: st.center ? 'center' : 'left',
+    borderBottom: st.rule === 'accent' ? `1.5px solid ${c}` : st.rule === 'hair' ? '0.5px solid #aaa' : 'none' }}>{st.caps ? t.toUpperCase() : t}</div>;
+  let body;
+  if (st.band) body = <><div style={{ background: c, margin: '-8px -8px 4px', padding: 8, color: '#fff', fontFamily: st.headCss, fontSize: 11 }}>Name</div>{sec('Experience')}{lines(6)}</>;
+  else if (st.sidebar) body = <div style={{ display: 'flex', gap: 5, margin: '-8px' }}><div style={{ width: '34%', background: '#' + st.tint, padding: '8px 4px' }}>{head}{sec('Skills')}{lines(4)}</div><div style={{ flex: 1, padding: '8px 6px 0 0' }}>{sec('Experience')}{lines(9)}</div></div>;
+  else if (st.narrative) body = <>{head}<div style={{ fontFamily: st.bodyCss, fontSize: 6, color: '#555', marginTop: 5, lineHeight: 1.4 }}>A short narrative profile for board and advisory roles…</div>{sec('Selected achievements')}{lines(4)}</>;
+  else body = <>{head}{sec('Summary')}{lines(2)}{sec('Experience')}{lines(k === 'compact' ? 8 : 5)}</>;
+  return (
+    <button onClick={onClick} title={(D.TEMPLATES[k].ats ? 'Safe for online applications' : 'Best for emailing; less friendly to applicant-tracking systems')}
+      style={{ appearance: 'none', cursor: 'pointer', padding: 5, textAlign: 'left', background: 'var(--bg-2)', borderRadius: 4, border: on ? '2px solid var(--ink-1)' : '1px solid var(--line-2)' }}>
+      <div style={{ background: '#fff', borderRadius: 2, padding: 8, height: 92, overflow: 'hidden' }}>{body}</div>
+      <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--ink-1)', display: 'flex', justifyContent: 'space-between' }}>
+        <span>{D.TEMPLATES[k].label}</span>{!D.TEMPLATES[k].ats && <span title="Less friendly to applicant-tracking systems" style={{ color: 'oklch(70% 0.12 75)' }}>●</span>}
+      </div>
+    </button>
+  );
+}
+
+function FormatControls({ format, onChange, kind, onFit, fitting, persona, onSaveLook }) {
+  useDocFonts();
+  const D = window.LU_DOCS;
+  const f = D.normalize(format);
   const set = (k, v) => onChange({ ...f, [k]: v });
   const toggle = (group, k) => onChange({ ...f, [group]: { ...f[group], [k]: !f[group][k] } });
+  const [open, setOpen] = React.useState(false);
+  const templates = kind === 'letter' ? ['classic', 'executive', 'modern', 'minimal', 'banner'] : Object.keys(D.TEMPLATES);
+  const move = (i, d) => { const o = f.sectionOrder.slice(); const j = i + d; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; set('sectionOrder', o); };
+  const lbl = { fontSize: 11.5, color: 'var(--ink-3)', display: 'block', marginBottom: 3 };
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-        {(kind === 'letter' ? [['classic', 'Classic'], ['modern', 'Modern']] : [['classic', 'Classic'], ['modern', 'Modern'], ['bio', 'Board bio']]).map(([k, l]) =>
-          <Chip key={k} on={f.template === k} onClick={() => onChange({ ...f, template: k, pages: k === 'bio' ? 1 : f.pages })}>{l}</Chip>)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(92px, 1fr))', gap: 6 }}>
+        {templates.map((k) => <TemplateThumb key={k} k={k} f={f} on={f.template === k} onClick={() => onChange(D.applyTemplate(f, k))}/>)}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 6 }}>
-        {kind !== 'letter' && <select aria-label="Length" value={f.pages} onChange={(e) => set('pages', +e.target.value)} style={docSel}><option value={1}>1 page</option><option value={2}>2 pages</option></select>}
-        <select aria-label="Spacing" value={f.spacing} onChange={(e) => set('spacing', e.target.value)} style={docSel}><option value="compact">Compact spacing</option><option value="balanced">Balanced spacing</option><option value="airy">Airy spacing</option></select>
-        <select aria-label="Font" value={f.font} onChange={(e) => set('font', e.target.value)} style={docSel}><option value="serif">Serif (Georgia)</option><option value="sans">Sans (Arial)</option></select>
-        {f.template === 'modern' && <select aria-label="Accent colour" value={f.accent} onChange={(e) => set('accent', e.target.value)} style={docSel}>{Object.keys(window.LU_DOCS.ACCENTS).map((k) => <option key={k} value={k}>Accent: {k}</option>)}</select>}
-        <select aria-label="Paper" value={f.paper} onChange={(e) => set('paper', e.target.value)} style={docSel}><option value="letter">US Letter</option><option value="a4">A4</option></select>
+      <div style={{ fontSize: 11.5, marginTop: 6, color: D.TEMPLATES[f.template].ats ? 'oklch(62% 0.12 150)' : 'oklch(70% 0.12 75)' }}>
+        {D.TEMPLATES[f.template].ats ? 'Safe for online applications (applicant-tracking friendly).' : 'Best for emailing or handing to a recruiter. Use a single-column template for online applications.'}
       </div>
-      {kind !== 'letter' && (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8, fontSize: 12, color: 'var(--ink-2)' }}>
-          {[['contact', 'location', 'Location'], ['contact', 'email', 'Email'], ['contact', 'phone', 'Phone'], ['contact', 'linkedin', 'LinkedIn'],
-            ['sections', 'summary', 'Summary'], ['sections', 'skills', 'Skills'], ['sections', 'education', 'Education'], ['sections', 'boards', 'Boards'], ['sections', 'credentials', 'Certifications']].map(([g, k, l]) => (
-            <label key={g + k} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!f[g][k]} onChange={() => toggle(g, k)}/>{l}
-            </label>
-          ))}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 }}>
+        <label><span style={lbl}>Fonts</span><select aria-label="Font pairing" value={f.fontPair} onChange={(e) => set('fontPair', e.target.value)} style={{ ...docSel, width: '100%' }}>{Object.entries(D.FONT_PAIRS).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}</select></label>
+        {kind !== 'letter' && <label><span style={lbl}>Length</span><select aria-label="Length" value={f.pages} onChange={(e) => set('pages', +e.target.value)} style={{ ...docSel, width: '100%' }}><option value={1}>1 page</option><option value={2}>2 pages</option></select></label>}
+        <label><span style={lbl}>Text size · {f.size}pt</span><input aria-label="Text size" type="range" min="9" max="11.5" step="0.5" value={f.size} onChange={(e) => set('size', +e.target.value)} style={{ width: '100%' }}/></label>
+        <label><span style={lbl}>Margins · {f.margin.toFixed(2)}in</span><input aria-label="Margins" type="range" min="0.5" max="1" step="0.05" value={f.margin} onChange={(e) => set('margin', +e.target.value)} style={{ width: '100%' }}/></label>
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-3)', marginRight: 2 }}>Colour</span>
+        {Object.entries(D.PALETTE).map(([k, hex]) => (
+          <button key={k} aria-label={'Colour ' + k} title={k} onClick={() => set('color', hex)} style={{ width: 20, height: 20, borderRadius: '50%', padding: 0, cursor: 'pointer', background: '#' + hex, border: f.color === hex ? '2px solid var(--ink-1)' : '2px solid transparent', outline: '1px solid var(--line-2)' }}/>
+        ))}
+        <input aria-label="Custom colour" type="color" value={'#' + f.color} onChange={(e) => set('color', e.target.value.replace('#', '').toUpperCase())} style={{ width: 26, height: 22, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}/>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+        {kind !== 'letter' && onFit && <Btn variant="outline" size="s" disabled={fitting} onClick={onFit}>{fitting ? 'Fitting…' : `Fit to ${f.pages} page${f.pages === 1 ? '' : 's'}`}</Btn>}
+        <button style={docLink} onClick={() => setOpen(!open)}>{open ? 'Fewer options' : 'More options'}</button>
+        {persona && onSaveLook && <button style={docLink} onClick={onSaveLook} title={'New resumes for ' + persona.code + ' start with this look'}>Save as {persona.code}'s look</button>}
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 10, padding: '10px 12px', border: '1px solid var(--line-1)', borderRadius: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+            <label><span style={lbl}>Line spacing</span><select value={f.lineSpacing} onChange={(e) => set('lineSpacing', +e.target.value)} style={{ ...docSel, width: '100%' }}><option value={1}>Single</option><option value={1.05}>Tight</option><option value={1.15}>Normal</option><option value={1.25}>Relaxed</option></select></label>
+            <label><span style={lbl}>Section spacing</span><select value={f.sectionGap} onChange={(e) => set('sectionGap', e.target.value)} style={{ ...docSel, width: '100%' }}><option value="compact">Compact</option><option value="balanced">Balanced</option><option value="airy">Airy</option></select></label>
+            <label><span style={lbl}>Paper</span><select value={f.paper} onChange={(e) => set('paper', e.target.value)} style={{ ...docSel, width: '100%' }}><option value="letter">US Letter</option><option value="a4">A4</option></select></label>
+            {kind !== 'letter' && <label><span style={lbl}>Dates</span><select value={f.datePos} onChange={(e) => set('datePos', e.target.value)} style={{ ...docSel, width: '100%' }}><option value="right">Right of the title</option><option value="below">Below the title</option></select></label>}
+            {kind !== 'letter' && <label><span style={lbl}>Role line</span><select value={f.roleOrder} onChange={(e) => set('roleOrder', e.target.value)} style={{ ...docSel, width: '100%' }}><option value="title">Title first</option><option value="company">Company first</option></select></label>}
+            {kind !== 'letter' && <label><span style={lbl}>Bullets</span><select value={f.bullet} onChange={(e) => set('bullet', e.target.value)} style={{ ...docSel, width: '100%' }}><option value="•">• Round</option><option value="–">– Dash</option><option value="▪">▪ Square</option></select></label>}
+          </div>
+          <label style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 12, color: 'var(--ink-2)', marginTop: 8 }}><input type="checkbox" checked={f.headingCaps} onChange={() => set('headingCaps', !f.headingCaps)}/>Headings in capitals</label>
+          {kind !== 'letter' && (
+            <>
+              <div style={{ ...docMono, margin: '12px 0 4px' }}>Contact details</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-2)' }}>
+                {[['location', 'Location'], ['email', 'Email'], ['phone', 'Phone'], ['linkedin', 'LinkedIn']].map(([k, l]) => (
+                  <label key={k} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={!!f.contact[k]} onChange={() => toggle('contact', k)}/>{l}</label>
+                ))}
+              </div>
+              <div style={{ ...docMono, margin: '12px 0 4px' }}>Sections: order, heading and show</div>
+              {f.sectionOrder.map((k, i) => (
+                <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}>
+                  {k === 'experience' ? <span style={{ width: 16 }}/> : <input type="checkbox" aria-label={'Show ' + k} checked={!!f.sections[k]} onChange={() => toggle('sections', k)}/>}
+                  <input value={f.sectionTitles[k] || ''} placeholder={D.SECTION_TITLES[k]} onChange={(e) => set('sectionTitles', { ...f.sectionTitles, [k]: e.target.value })}
+                    style={{ flex: 1, height: 26, padding: '0 6px', fontSize: 12.5, background: 'var(--bg-0)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3 }}/>
+                  <button aria-label="Move up" onClick={() => move(i, -1)} disabled={i === 0} style={{ ...docLink, textDecoration: 'none' }}>↑</button>
+                  <button aria-label="Move down" onClick={() => move(i, 1)} disabled={i === f.sectionOrder.length - 1} style={{ ...docLink, textDecoration: 'none' }}>↓</button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -46,7 +125,8 @@ function FormatControls({ format, onChange, kind }) {
 }
 
 // ── Live preview at true page size, scaled to fit, with a page-fit check ──
-function DocPreview({ model, targetPages }) {
+function DocPreview({ model, targetPages, onMeasure }) {
+  useDocFonts();
   const outer = React.useRef(null), inner = React.useRef(null);
   const [scale, setScale] = React.useState(0.6);
   const [height, setHeight] = React.useState(0);
@@ -55,34 +135,65 @@ function DocPreview({ model, targetPages }) {
   React.useEffect(() => {
     const measure = () => {
       if (outer.current) setScale(Math.min(1, (outer.current.clientWidth - 2) / pageW));
-      if (inner.current) setHeight(inner.current.scrollHeight);
+      if (inner.current) { const h = inner.current.scrollHeight; setHeight(h); if (onMeasure) onMeasure(h / usable); }
     };
     measure();
+    const t = setTimeout(measure, 400); // after web fonts settle
     const ro = window.ResizeObserver ? new ResizeObserver(measure) : null;
     if (ro && outer.current) ro.observe(outer.current);
-    return () => ro && ro.disconnect();
+    return () => { clearTimeout(t); ro && ro.disconnect(); };
   });
   const pages = Math.max(1, height / usable);
   const n = Math.ceil(pages - 0.02);
-  // How far over the target length, in lines, so it's clear how much to cut.
-  const lineH = px(st.size.body) * 1.35;
-  const overLines = Math.ceil((height - (targetPages || 2) * usable) / lineH);
-  const overMsg = overLines <= 12 ? `About ${overLines} line${overLines === 1 ? '' : 's'} over ${targetPages || 2} page${(targetPages || 2) === 1 ? '' : 's'}: untick an item or choose Compact`
-    : `About ${pages.toFixed(1)} pages: untick a few items or choose Compact`;
-  const accent = '#' + st.accent;
-  const sectionHead = (t) => (
-    <div style={{ fontFamily: st.head, fontSize: px(st.size.section), color: accent, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: st.fmt.template === 'classic' ? 400 : 700,
-      borderBottom: st.rule === 'accent' ? `1.5px solid ${accent}` : '0.75px solid #999', paddingBottom: 2, margin: `${px(st.gap.section)}px 0 ${px(st.gap.para * 2)}px` }}>{t}</div>
+  const lineH = px(st.size.body) * st.line * 1.15;
+  const target = targetPages || 2;
+  const overLines = Math.ceil((height - target * usable) / lineH);
+  const overMsg = overLines <= 12 ? `About ${overLines} line${overLines === 1 ? '' : 's'} over ${target} page${target === 1 ? '' : 's'}: try Fit, untick an item, or choose Compact`
+    : `About ${pages.toFixed(1)} pages: try Fit, or untick a few items`;
+  const col = '#' + st.color;
+  const body = { fontFamily: st.bodyCss, fontSize: px(st.size.body), color: '#1b1b1b', lineHeight: st.line * 1.15 };
+  const sectionHead = (t, inSide) => (
+    <div style={{ fontFamily: st.headCss, fontSize: px(st.size.section), color: '#' + st.headingColor, letterSpacing: st.caps ? '0.06em' : 0, fontWeight: st.headingBold ? 700 : 400,
+      textAlign: st.center ? 'center' : 'left', borderBottom: inSide ? 'none' : st.rule === 'accent' ? `1.5px solid ${col}` : st.rule === 'hair' ? '0.75px solid #999' : 'none',
+      paddingBottom: 2, margin: `${px(st.gap.section)}px 0 ${px(st.gap.para * 2)}px` }}>{st.caps ? t.toUpperCase() : t}</div>
   );
-  const body = { fontFamily: st.body, fontSize: px(st.size.body), color: '#1b1b1b', lineHeight: 1.35 };
+  const bullet = (t, j) => (
+    <div key={j} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginTop: px(st.gap.para) }}><span style={{ color: col }}>{st.bullet}</span><span>{t}</span></div>
+  );
+  const role = (x, i) => {
+    const first = st.roleOrder === 'company' ? <span><b>{x.company}</b>{'  ·  '}{x.title}</span> : <span><b>{x.title}</b>{'  ·  '}{x.company}</span>;
+    return (
+      <div key={i} style={{ marginTop: px(st.gap.item) }}>
+        {st.datePos === 'below' ? <>{first}<div style={{ fontSize: px(st.size.small), color: '#666', fontStyle: 'italic' }}>{x.dates}</div></>
+          : <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>{first}<span style={{ fontSize: px(st.size.small), color: '#555', whiteSpace: 'nowrap' }}>{x.dates}</span></div>}
+        {x.bullets.map(bullet)}
+      </div>
+    );
+  };
+  const section = (sec, inSide) => (
+    <div key={sec.key}>
+      {sectionHead(sec.title, inSide)}
+      {sec.key === 'summary' ? sec.items.map((t, i) => <div key={i}>{t}</div>)
+        : sec.key === 'experience' ? sec.items.map(role)
+        : sec.key === 'highlights' ? sec.items.map(bullet)
+        : sec.key === 'skills' && !inSide ? <div>{sec.items.join('  ·  ')}</div>
+        : sec.items.map((t, i) => <div key={i} style={inSide ? { fontSize: px(st.size.small + 0.5), marginBottom: 2 } : {}}>{t}</div>)}
+    </div>
+  );
+  const header = (onBand) => (
+    <div style={{ textAlign: st.center ? 'center' : 'left' }}>
+      <div style={{ fontFamily: st.headCss, fontSize: px(st.size.name), color: onBand ? '#fff' : '#' + st.nameColor, lineHeight: 1.15 }}>{model.name}</div>
+      {model.headline && <div style={{ ...body, fontSize: px(st.size.headline), color: onBand ? '#fff' : '#444', marginTop: 2 }}>{model.headline}</div>}
+      {model.contact.length > 0 && <div style={{ ...body, fontSize: px(st.size.small), color: onBand ? '#f2f2f2' : '#555', marginTop: 2, paddingBottom: 3,
+        borderBottom: model.kind === 'resume' && st.rule === 'hair' && !onBand && !st.sidebar ? '0.75px solid #999' : 'none' }}>{model.contact.join('  ·  ')}</div>}
+    </div>
+  );
   return (
     <div ref={outer}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
         <span style={docMono}>Preview</span>
         {model.kind === 'resume' && (
-          <span style={{ fontSize: 12, color: n > (targetPages || 2) ? 'var(--signal)' : 'oklch(62% 0.12 150)' }}>
-            {n > (targetPages || 2) ? overMsg : `Fits on ${n} page${n === 1 ? '' : 's'}`}
-          </span>
+          <span style={{ fontSize: 12, color: n > target ? 'var(--signal)' : 'oklch(62% 0.12 150)' }}>{n > target ? overMsg : `Fits on ${n} page${n === 1 ? '' : 's'}`}</span>
         )}
       </div>
       <div style={{ width: pageW * scale, height: Math.max(pageH, height + 2 * m) * scale, overflow: 'hidden', border: '1px solid var(--line-2)', background: '#fff' }}>
@@ -92,46 +203,27 @@ function DocPreview({ model, targetPages }) {
               <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 11, color: '#c33', fontFamily: 'Arial' }}>page {i + 2}</span>
             </div>
           ))}
-          <div ref={inner}>
-            <div style={{ fontFamily: st.head, fontSize: px(st.size.name), color: accent, lineHeight: 1.15 }}>{model.name}</div>
-            {model.headline && <div style={{ ...body, fontSize: px(st.size.headline), color: '#444', marginTop: 2 }}>{model.headline}</div>}
-            {model.contact.length > 0 && <div style={{ ...body, fontSize: px(st.size.small), color: '#555', marginTop: 2, paddingBottom: 3, borderBottom: model.kind === 'resume' && st.rule === 'hair' ? '0.75px solid #999' : 'none' }}>{model.contact.join('  ·  ')}</div>}
+          <div ref={inner} style={body}>
+            {st.band ? <div style={{ background: col, padding: '14px 14px 10px', marginBottom: 4 }}>{header(true)}</div> : header(false)}
             {model.kind === 'letter' ? (
-              <div style={body}>
+              <div>
                 <div style={{ margin: '24px 0 16px' }}>{model.date}</div>
                 {model.recipient && <div style={{ marginBottom: 16 }}>{model.recipient}</div>}
                 <div style={{ marginBottom: 10 }}>{model.salutation}</div>
-                {model.paragraphs.map((p, i) => <p key={i} style={{ margin: '0 0 10px', lineHeight: 1.45 }}>{p}</p>)}
+                {model.paragraphs.map((p, i) => <p key={i} style={{ margin: '0 0 10px' }}>{p}</p>)}
                 <div style={{ marginTop: 8 }}>{model.signoff}</div>
                 <div style={{ marginTop: 32 }}>{model.signature}</div>
               </div>
-            ) : (
-              <div style={body}>
-                {model.summary && <>{sectionHead(st.fmt.template === 'bio' ? 'Profile' : 'Summary')}<div style={{ lineHeight: 1.4 }}>{model.summary}</div></>}
-                {model.experience.length > 0 && sectionHead('Experience')}
-                {model.experience.map((x, i) => (
-                  <div key={i} style={{ marginTop: px(st.gap.item) }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span><b>{x.title}</b>{'  ·  '}{x.company}</span>
-                      <span style={{ fontSize: px(st.size.small), color: '#555', whiteSpace: 'nowrap' }}>{x.dates}</span>
-                    </div>
-                    {x.bullets.map((b, j) => (
-                      <div key={j} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginTop: px(st.gap.para) }}>
-                        <span style={{ color: accent }}>•</span><span>{b}</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                {model.skills.length > 0 && <>{sectionHead('Skills and expertise')}<div>{model.skills.join('  ·  ')}</div></>}
-                {model.education.length > 0 && <>{sectionHead('Education')}{model.education.map((t, i) => <div key={i}>{t}</div>)}</>}
-                {model.boards.length > 0 && <>{sectionHead('Board and advisory')}{model.boards.map((t, i) => <div key={i}>{t}</div>)}</>}
-                {model.credentials.length > 0 && <>{sectionHead('Certifications and awards')}{model.credentials.map((t, i) => <div key={i}>{t}</div>)}</>}
+            ) : st.sidebar ? (
+              <div style={{ display: 'flex', gap: '0.25in', marginTop: 8 }}>
+                <div style={{ width: '32%', background: '#' + st.tint, padding: '6px 9px', boxSizing: 'border-box' }}>{model.side.map((x) => section(x, true))}</div>
+                <div style={{ flex: 1 }}>{model.main.map((x) => section(x, false))}</div>
               </div>
-            )}
+            ) : model.main.map((x) => section(x, false))}
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 6 }}>The page count is a close estimate; the Google Doc may differ by a few lines.</div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 6 }}>The page count is a close estimate; the Google Doc may differ by a line or two. Send the Doc as a PDF (File → Download → PDF) so fonts stay exact.</div>
     </div>
   );
 }
@@ -168,13 +260,55 @@ function ResumeWorkspace({ opp, onUpdate }) {
   const [busy, setBusy] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [pages, setPages] = React.useState(2);
-  const save = (next) => onUpdate({ ...opp, docs: { ...(opp.docs || {}), resume: next } });
+  const [fitting, setFitting] = React.useState(false);
+  const measured = React.useRef(1);
+  const latest = React.useRef(null);
+  const persona = (window.LU_PERSONAS || []).find((p) => p.id === opp.persona) || null;
+  const save = (next) => { latest.current = next; onUpdate({ ...opp, docs: { ...(opp.docs || {}), resume: next } }); };
+  // Fit to pages: tighten line spacing, section spacing, margins, then text size, one step at a time,
+  // re-measuring the preview after each, until it fits (never below 9pt or 0.5in margins).
+  const fit = async () => {
+    setFitting(true);
+    try {
+      let cur = latest.current || st;
+      const target = D.normalize(cur.format).pages;
+      const steps = [
+        (f) => (f.lineSpacing > 1.15 ? { ...f, lineSpacing: 1.15 } : null),
+        (f) => (f.sectionGap === 'airy' ? { ...f, sectionGap: 'balanced' } : null),
+        (f) => (f.lineSpacing > 1.05 ? { ...f, lineSpacing: 1.05 } : null),
+        (f) => (f.sectionGap !== 'compact' ? { ...f, sectionGap: 'compact' } : null),
+        (f) => (f.margin > 0.6 ? { ...f, margin: Math.max(0.6, +(f.margin - 0.1).toFixed(2)) } : null),
+        (f) => (f.size > 9.5 ? { ...f, size: f.size - 0.5 } : null),
+        (f) => (f.lineSpacing > 1 ? { ...f, lineSpacing: 1 } : null),
+        (f) => (f.margin > 0.5 ? { ...f, margin: Math.max(0.5, +(f.margin - 0.05).toFixed(2)) } : null),
+        (f) => (f.size > 9 ? { ...f, size: f.size - 0.5 } : null),
+      ];
+      const wait = () => new Promise((r) => setTimeout(r, 550));
+      await wait();
+      for (let guard = 0; guard < 16 && measured.current > target + 0.005; guard++) {
+        const f = D.normalize(cur.format);
+        const next = steps.map((fn) => fn(f)).find(Boolean);
+        if (!next) break;
+        cur = { ...cur, format: next };
+        save(cur);
+        await wait();
+      }
+      window.LU_CORE.pill(measured.current > target + 0.005 ? 'Still a little long: untick an item or two' : `Fits on ${target} page${target === 1 ? '' : 's'}`);
+    } finally { setFitting(false); }
+  };
+  const saveLook = () => {
+    if (!persona) return;
+    const look = { ...D.normalize(st.format) };
+    window.LU_API.put('/api/personas/' + persona.id, { ...persona, docFormat: look });
+    window.LU_CORE.pill(`Saved: new resumes for ${persona.code} start with this look`);
+  };
   const tailor = async () => {
     if (st && !window.confirm('Tailor again? Your ticks and edits on this resume will be replaced. Created Google Docs are kept.')) return;
     setBusy('Claude is reading the job and your profile… about 30–60 seconds.'); setError(null);
     try {
       const fresh = await D.tailorResume(opp, (st && st.format && st.format.pages) || pages);
-      save({ ...fresh, format: (st && st.format) || { ...D.DEFAULT_FORMAT, pages }, versions: (st && st.versions) || [] });
+      const look = persona && persona.docFormat ? { ...persona.docFormat, pages } : { ...D.DEFAULT_FORMAT, pages };
+      save({ ...fresh, format: (st && st.format) || look, versions: (st && st.versions) || [] });
     } catch (e) { setError(String(e.message || e).slice(0, 200)); } finally { setBusy(null); }
   };
   if (!D) return <div style={{ padding: 28, color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load resumes.</div>;
@@ -224,7 +358,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)', minHeight: 0, height: '100%' }}>
       <div style={{ overflow: 'auto', padding: '18px 22px 30px', borderRight: '1px solid var(--line-1)' }}>
         <div style={{ ...docMono, marginBottom: 8 }}>Format</div>
-        <FormatControls format={st.format} onChange={(format) => save({ ...st, format })} kind="resume"/>
+        <FormatControls format={st.format} onChange={(format) => save({ ...st, format })} kind="resume" onFit={fit} fitting={fitting} persona={persona} onSaveLook={saveLook}/>
 
         <div style={{ ...docMono, margin: '18px 0 6px' }}>Headline and summary</div>
         <TextInput value={st.headline} onChange={(v) => save({ ...st, headline: v })}/>
@@ -296,7 +430,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}
         {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 8 }}>{error}</div>}
-        <DocPreview model={model} targetPages={st.format.pages}/>
+        <DocPreview model={model} targetPages={D.normalize(st.format).pages} onMeasure={(p) => { measured.current = p; }}/>
         <DocVersions versions={st.versions} onSent={markSent}/>
       </div>
     </div>
@@ -336,7 +470,7 @@ function LetterWorkspace({ opp, onUpdate }) {
       </div>
     );
   }
-  const model = D.letterModel(st);
+  const model = D.letterModel({ ...st, headline: st.headline || (docs.resume && docs.resume.headline) || '' });
   const setPara = (i, v) => save({ ...st, paragraphs: st.paragraphs.map((p, j) => (j === i ? v : p)) });
   const create = async () => {
     setBusy('Building the document…'); setError(null);
