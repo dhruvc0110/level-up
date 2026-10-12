@@ -110,8 +110,10 @@
       if (mode === 'omit') return null;
       const order = (state.order && state.order[r.id]) || [];
       const ids = [...order, ...c.achievements.filter((a) => a.roleId === r.id).map((a) => a.id).filter((id) => !order.includes(id))];
-      const bullets = mode === 'brief' ? [] : ids.map((id) => state.items && state.items[id]).filter((x) => x && x.on).map((x) => x.text);
-      return { title: r.title, company: r.company, dates: `${fmtMonth(r.start)} – ${fmtMonth(r.end)}`, location: r.location || '', bullets };
+      const onIds = mode === 'brief' ? [] : ids.filter((id) => state.items && state.items[id] && state.items[id].on);
+      const bullets = onIds.map((id) => state.items[id].text);
+      // Keys name each block so a manual page break can sit before it.
+      return { key: 'role:' + r.id, title: r.title, company: r.company, dates: `${fmtMonth(r.start)} – ${fmtMonth(r.end)}`, location: r.location || '', bullets, bulletKeys: onIds.map((id) => 'b:' + id) };
     }).filter(Boolean);
     const title = (k) => (f.sectionTitles[k] && String(f.sectionTitles[k]).trim()) || SECTION_TITLES[k];
     const content = {
@@ -127,13 +129,14 @@
     if (st.narrative) {
       // Board bio: a profile paragraph, selected achievements across roles, then a short career line.
       const highlights = experience.flatMap((x) => x.bullets).slice(0, 6);
-      sections = sections.map((x) => (x.key === 'summary' ? { ...x, title: f.sectionTitles.summary || 'Profile' } : x.key === 'experience' ? { ...x, title: f.sectionTitles.experience || 'Career', items: experience.map((e) => ({ ...e, bullets: [] })) } : x));
+      const highlightKeys = experience.flatMap((x) => x.bulletKeys).slice(0, 6);
+      sections = sections.map((x) => (x.key === 'summary' ? { ...x, title: f.sectionTitles.summary || 'Profile' } : x.key === 'experience' ? { ...x, title: f.sectionTitles.experience || 'Career', items: experience.map((e) => ({ ...e, bullets: [], bulletKeys: [] })) } : x));
       const at = sections.findIndex((x) => x.key === 'experience');
-      if (highlights.length) sections.splice(Math.max(0, at), 0, { key: 'highlights', title: SECTION_TITLES.highlights, items: highlights });
+      if (highlights.length) sections.splice(Math.max(0, at), 0, { key: 'highlights', title: SECTION_TITLES.highlights, items: highlights, itemKeys: highlightKeys });
     }
     const sideKeys = ['skills', 'education', 'boards', 'credentials'];
     return {
-      kind: 'resume', style: st,
+      kind: 'resume', style: st, breaks: st.sidebar ? [] : (state.breaks || []),
       name: p.name || 'Your name', headline: state.headline || p.headline || '', contact,
       sections,
       side: st.sidebar ? sections.filter((x) => sideKeys.includes(x.key)) : [],
@@ -147,7 +150,7 @@
     const st = styleFor(Object.assign({}, f, { template: ['sidebar', 'compact', 'bio'].includes(f.template) ? 'classic' : f.template, pages: 1 }));
     const contact = [p.location, p.email, p.phone, cleanUrl(p.linkedin)].filter(Boolean);
     // The tailored headline from this job's resume reads better than a long LinkedIn headline.
-    return { kind: 'letter', style: st, name: p.name || 'Your name', headline: state.headline || '', contact,
+    return { kind: 'letter', style: st, breaks: [], name: p.name || 'Your name', headline: state.headline || '', contact,
       date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       recipient: state.recipient || '', salutation: state.salutation || 'Dear Hiring Manager,', paragraphs: (state.paragraphs || []).filter((x) => String(x).trim()), signoff: state.signoff || 'Kind regards,', signature: (p.name || '') };
   }
@@ -289,7 +292,7 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
       : st.rule === 'hair' ? { bottom: { style: D.BorderStyle.SINGLE, size: 4, color: '999999', space: 2 } } : undefined;
     const headText = (t) => (st.caps ? t.toUpperCase() : t);
     const sectionHead = (t, inSide) => para([run(headText(t), { font: st.head, size: pt(st.size.section), bold: st.headingBold, color: st.headingColor, characterSpacing: st.caps ? 20 : 0 })],
-      Object.assign({ spacing: { before: Math.round(st.gap.section * 20), after: Math.round(st.gap.para * 2 * 20) } }, ruleBorder && !inSide ? { border: ruleBorder } : {}, st.center ? { alignment: D.AlignmentType.CENTER } : {}));
+      Object.assign({ keepNext: true, spacing: { before: Math.round(st.gap.section * 20), after: Math.round(st.gap.para * 2 * 20) } }, ruleBorder && !inSide ? { border: ruleBorder } : {}, st.center ? { alignment: D.AlignmentType.CENTER } : {}));
     const cellOf = (children, width, o) => new D.TableCell(Object.assign({ width: { size: width, type: D.WidthType.DXA }, borders: noBorders, margins: { top: 0, bottom: 0, left: 0, right: 0 }, children }, o || {}));
     const table = (rows, widths) => new D.Table({ width: { size: widths.reduce((a, b) => a + b, 0), type: D.WidthType.DXA }, columnWidths: widths, borders: noBorders, layout: D.TableLayoutType.FIXED, rows });
 
@@ -322,16 +325,20 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
         const cp = (children, align) => [new D.Paragraph({ children, alignment: align, spacing: { before, after: 40, line: LINE }, keepNext: true })];
         out.push(table([new D.TableRow({ cantSplit: true, children: [cellOf(cp(first, D.AlignmentType.LEFT), width - right), cellOf(cp([run(x.dates, { size: pt(st.size.small), color: '555555' })], D.AlignmentType.RIGHT), right)] })], [width - right, right]));
       }
-      x.bullets.forEach((b) => out.push(para([run(b)], { numbering: { reference: 'lu-bullets', level: 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
+      x.bullets.forEach((b, i) => out.push(...brk((x.bulletKeys || [])[i]), para([run(b)], { numbering: { reference: 'lu-bullets', level: 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
       return out;
     };
+    // A manual page break: an empty, near-zero-height paragraph that starts a new page.
+    const breaks = new Set(model.breaks || []);
+    const brk = (key) => (breaks.has(key) ? [new D.Paragraph({ pageBreakBefore: true, spacing: { before: 0, after: 0, line: 20, lineRule: D.LineRuleType ? D.LineRuleType.EXACT : undefined }, children: [new D.TextRun({ text: '', size: 2 })] })] : []);
     const sectionBlocks = (sec, width, inSide) => {
-      const out = [sectionHead(sec.title, inSide)];
+      const head = sectionHead(sec.title, inSide);
+      const out = [...brk('sec:' + sec.key), head];
       if (sec.key === 'summary') sec.items.forEach((t) => out.push(para([run(t)], { spacing: { after: 60, line: LINE } })));
-      else if (sec.key === 'experience') sec.items.forEach((x) => out.push(...roleBlocks(x, width)));
-      else if (sec.key === 'highlights') sec.items.forEach((t) => out.push(para([run(t)], { numbering: { reference: 'lu-bullets', level: 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
+      else if (sec.key === 'experience') sec.items.forEach((x) => out.push(...brk(x.key), ...roleBlocks(x, width)));
+      else if (sec.key === 'highlights') sec.items.forEach((t, i) => out.push(...brk((sec.itemKeys || [])[i]), para([run(t)], { numbering: { reference: 'lu-bullets', level: 0 }, spacing: { after: Math.round(st.gap.para * 20), line: LINE } })));
       else if (sec.key === 'skills' && !inSide) out.push(para([run(sec.items.join('  ·  '))]));
-      else sec.items.forEach((t) => out.push(para([run(t, inSide ? { size: pt(st.size.small + 0.5) } : {})])));
+      else sec.items.forEach((t, i) => out.push(...brk(sec.key + ':' + i), para([run(t, inSide ? { size: pt(st.size.small + 0.5) } : {})])));
       return out;
     };
 

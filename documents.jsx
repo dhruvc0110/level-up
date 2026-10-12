@@ -125,31 +125,22 @@ function FormatControls({ format, onChange, kind, onFit, fitting, persona, onSav
 }
 
 // ── Live preview at true page size, scaled to fit, with a page-fit check ──
-function DocPreview({ model, targetPages, onMeasure }) {
+// The preview lays the document out as real pages: every block (heading, role,
+// bullet…) is measured at true size, then placed page by page. Manual breaks
+// ("Start page here") are block keys saved with the resume and sent to the Doc.
+function DocPreview({ model, targetPages, onMeasure, onBreaks }) {
   useDocFonts();
-  const outer = React.useRef(null), inner = React.useRef(null);
+  const outer = React.useRef(null), meas = React.useRef(null), sideMeas = React.useRef(null), headMeas = React.useRef(null);
   const [scale, setScale] = React.useState(0.6);
-  const [height, setHeight] = React.useState(0);
+  const [dims, setDims] = React.useState({ hs: [], side: 0, head: 0 });
+  const [hover, setHover] = React.useState(null);
   const st = model.style, DPI = 96, px = (ptv) => ptv * 4 / 3;
   const pageW = st.page.w * DPI, pageH = st.page.h * DPI, m = st.margin * DPI, usable = pageH - 2 * m;
-  React.useEffect(() => {
-    const measure = () => {
-      if (outer.current) setScale(Math.min(1, (outer.current.clientWidth - 2) / pageW));
-      if (inner.current) { const h = inner.current.scrollHeight; setHeight(h); if (onMeasure) onMeasure(h / usable); }
-    };
-    measure();
-    const t = setTimeout(measure, 400); // after web fonts settle
-    const ro = window.ResizeObserver ? new ResizeObserver(measure) : null;
-    if (ro && outer.current) ro.observe(outer.current);
-    return () => { clearTimeout(t); ro && ro.disconnect(); };
-  });
-  const pages = Math.max(1, height / usable);
-  const n = Math.ceil(pages - 0.02);
-  const lineH = px(st.size.body) * st.line * 1.15;
-  const target = targetPages || 2;
-  const overLines = Math.ceil((height - target * usable) / lineH);
-  const overMsg = overLines <= 12 ? `About ${overLines} line${overLines === 1 ? '' : 's'} over ${target} page${target === 1 ? '' : 's'}: try Fit, untick an item, or choose Compact`
-    : `About ${pages.toFixed(1)} pages: try Fit, or untick a few items`;
+  const contentW = pageW - 2 * m, sideW = contentW * 0.32, gapW = 0.25 * DPI, mainW = contentW - sideW - gapW;
+  const sidebar = model.kind === 'resume' && st.sidebar;
+  const canBreak = model.kind === 'resume' && !sidebar && !!onBreaks;
+  const breaks = new Set(model.breaks || []);
+
   const col = '#' + st.color;
   const body = { fontFamily: st.bodyCss, fontSize: px(st.size.body), color: '#1b1b1b', lineHeight: st.line * 1.15 };
   const sectionHead = (t, inSide) => (
@@ -160,24 +151,19 @@ function DocPreview({ model, targetPages, onMeasure }) {
   const bullet = (t, j) => (
     <div key={j} style={{ display: 'flex', gap: 6, paddingLeft: 4, marginTop: px(st.gap.para) }}><span style={{ color: col }}>{st.bullet}</span><span>{t}</span></div>
   );
-  const role = (x, i) => {
+  const roleHead = (x) => {
     const first = st.roleOrder === 'company' ? <span><b>{x.company}</b>{'  ·  '}{x.title}</span> : <span><b>{x.title}</b>{'  ·  '}{x.company}</span>;
     return (
-      <div key={i} style={{ marginTop: px(st.gap.item) }}>
+      <div style={{ marginTop: px(st.gap.item) }}>
         {st.datePos === 'below' ? <>{first}<div style={{ fontSize: px(st.size.small), color: '#666', fontStyle: 'italic' }}>{x.dates}</div></>
           : <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>{first}<span style={{ fontSize: px(st.size.small), color: '#555', whiteSpace: 'nowrap' }}>{x.dates}</span></div>}
-        {x.bullets.map(bullet)}
       </div>
     );
   };
-  const section = (sec, inSide) => (
+  const sideSection = (sec) => (
     <div key={sec.key}>
-      {sectionHead(sec.title, inSide)}
-      {sec.key === 'summary' ? sec.items.map((t, i) => <div key={i}>{t}</div>)
-        : sec.key === 'experience' ? sec.items.map(role)
-        : sec.key === 'highlights' ? sec.items.map(bullet)
-        : sec.key === 'skills' && !inSide ? <div>{sec.items.join('  ·  ')}</div>
-        : sec.items.map((t, i) => <div key={i} style={inSide ? { fontSize: px(st.size.small + 0.5), marginBottom: 2 } : {}}>{t}</div>)}
+      {sectionHead(sec.title, true)}
+      {sec.items.map((t, i) => <div key={i} style={{ fontSize: px(st.size.small + 0.5), marginBottom: 2 }}>{t}</div>)}
     </div>
   );
   const header = (onBand) => (
@@ -188,42 +174,150 @@ function DocPreview({ model, targetPages, onMeasure }) {
         borderBottom: model.kind === 'resume' && st.rule === 'hair' && !onBand && !st.sidebar ? '0.75px solid #999' : 'none' }}>{model.contact.join('  ·  ')}</div>}
     </div>
   );
+  const headerNode = st.band ? <div style={{ background: col, padding: '14px 14px 10px', marginBottom: 4 }}>{header(true)}</div> : header(false);
+
+  // ── Blocks, in reading order ──
+  const blocks = [];
+  const add = (key, node, o) => blocks.push(Object.assign({ key, node, brk: false, keepNext: false }, o || {}));
+  if (!sidebar) add('header', headerNode);
+  if (model.kind === 'letter') {
+    add('date', <div style={{ margin: '24px 0 16px' }}>{model.date}</div>);
+    if (model.recipient) add('to', <div style={{ marginBottom: 16 }}>{model.recipient}</div>);
+    add('hi', <div style={{ marginBottom: 10 }}>{model.salutation}</div>);
+    model.paragraphs.forEach((t, i) => add('p:' + i, <p style={{ margin: '0 0 10px' }}>{t}</p>));
+    add('signoff', <div style={{ marginTop: 8 }}>{model.signoff}</div>);
+    add('sig', <div style={{ marginTop: 32 }}>{model.signature}</div>);
+  } else {
+    model.main.forEach((sec) => {
+      add('sec:' + sec.key, sectionHead(sec.title, false), { brk: true, keepNext: true, label: sec.title });
+      if (sec.key === 'experience') {
+        sec.items.forEach((x) => {
+          add(x.key, roleHead(x), { brk: true, keepNext: x.bullets.length > 0 });
+          x.bullets.forEach((t, j) => add((x.bulletKeys || [])[j] || x.key + ':' + j, bullet(t, j), { brk: true }));
+        });
+      } else if (sec.key === 'highlights') sec.items.forEach((t, i) => add((sec.itemKeys || [])[i] || 'highlights:' + i, bullet(t, i), { brk: true }));
+      else if (sec.key === 'skills') add('skills:0', <div>{sec.items.join('  ·  ')}</div>, { brk: true });
+      else sec.items.forEach((t, i) => add(sec.key + ':' + i, <div>{t}</div>, { brk: true }));
+    });
+  }
+
+  // ── Measure (hidden, true size), then paginate ──
+  React.useLayoutEffect(() => {
+    const read = () => {
+      if (outer.current) setScale(Math.min(1, (outer.current.clientWidth - 2) / pageW));
+      if (!meas.current) return;
+      const hs = [...meas.current.children].map((el) => el.offsetHeight);
+      const next = { hs, side: sideMeas.current ? sideMeas.current.offsetHeight : 0, head: headMeas.current ? headMeas.current.offsetHeight : 0 };
+      setDims((d) => (JSON.stringify(d) === JSON.stringify(next) ? d : next));
+    };
+    read();
+    const t = setTimeout(read, 400); // after web fonts settle
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(read);
+    const ro = window.ResizeObserver ? new ResizeObserver(read) : null;
+    if (ro && outer.current) ro.observe(outer.current);
+    return () => { clearTimeout(t); ro && ro.disconnect(); };
+  });
+
+  const cap1 = sidebar ? usable - dims.head - 8 : usable;
+  const pages = [[]];
+  let used = 0;
+  blocks.forEach((b, i) => {
+    const h = dims.hs[i] || 0, cap = pages.length === 1 ? cap1 : usable, page = pages[pages.length - 1];
+    const manual = b.brk && canBreak && breaks.has(b.key);
+    let start = false;
+    if (page.length && manual) start = true;
+    else if (page.length && used + h > cap + 0.5) start = true;
+    else if (page.length && b.keepNext && i + 1 < blocks.length && used + h + (dims.hs[i + 1] || 0) > cap + 0.5) start = true;
+    if (start) { pages.push([]); used = 0; }
+    pages[pages.length - 1].push({ b, i, manual: start && manual });
+    used += h;
+  });
+  const n = pages.length;
+  const lastCap = n === 1 ? cap1 : usable;
+  // The sidebar only sits on page 1, so a tall one can overflow on its own.
+  const fraction = Math.max((n - 1) + Math.min(1.5, used / lastCap), sidebar ? dims.side / cap1 : 0);
+  React.useEffect(() => { if (onMeasure && dims.hs.length) onMeasure(fraction); });
+
+  const lineH = px(st.size.body) * st.line * 1.15;
+  const target = targetPages || 2;
+  const overLines = Math.ceil(((fraction - target) * usable) / lineH);
+  const overMsg = overLines <= 12 ? `About ${overLines} line${overLines === 1 ? '' : 's'} over ${target} page${target === 1 ? '' : 's'}: try Fit, untick an item, or choose Compact`
+    : `About ${fraction.toFixed(1)} pages: try Fit, or untick a few items`;
+  const manualCount = canBreak ? blocks.filter((b) => b.brk && breaks.has(b.key)).length : 0;
+  const setBreak = (key, on) => {
+    const next = new Set(breaks);
+    if (on) next.add(key); else next.delete(key);
+    onBreaks([...next]);
+  };
+  const pill = { position: 'absolute', zIndex: 3, fontFamily: 'Arial, sans-serif', fontSize: 11 / scale, lineHeight: 1.3, padding: `${2 / scale}px ${7 / scale}px`, borderRadius: 3 / scale, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' };
+
+  const blockView = ({ b, manual }, idx) => {
+    const first = idx === 0;
+    const offer = canBreak && b.brk && !first && hover === b.key;
+    return (
+      <div key={b.key} style={{ display: 'flow-root', position: 'relative', outline: offer ? `${1 / scale}px dashed #9aa7b8` : 'none', outlineOffset: 2 / scale }}
+        onMouseEnter={canBreak && b.brk ? () => setHover(b.key) : undefined}>
+        {offer && (
+          <button style={{ ...pill, top: 0, right: 0, background: '#1f3a5f', color: '#fff' }} onClick={() => { setBreak(b.key, true); setHover(null); }}
+            title="Move this and everything after it to the next page">↵ Start page here</button>
+        )}
+        {manual && canBreak && (
+          <button style={{ ...pill, top: -m * 0.6, left: 0, background: '#f1e4e4', color: '#8a2a2a' }} onClick={() => setBreak(b.key, false)}
+            title="Let the content flow back onto the previous page">Page break you added · Remove ×</button>
+        )}
+        {b.node}
+      </div>
+    );
+  };
+
   return (
-    <div ref={outer}>
+    <div ref={outer} onMouseLeave={() => setHover(null)}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
-        <span style={docMono}>Preview</span>
+        <span style={docMono}>Preview · {n} page{n === 1 ? '' : 's'}</span>
         {model.kind === 'resume' && (
-          <span style={{ fontSize: 12, color: n > target ? 'var(--signal)' : 'oklch(62% 0.12 150)' }}>{n > target ? overMsg : `Fits on ${n} page${n === 1 ? '' : 's'}`}</span>
+          <span style={{ fontSize: 12, color: fraction > target + 0.005 ? 'var(--signal)' : 'oklch(62% 0.12 150)' }}>{fraction > target + 0.005 ? overMsg : `Fits on ${n} page${n === 1 ? '' : 's'}`}</span>
         )}
       </div>
-      <div style={{ width: pageW * scale, height: Math.max(pageH, height + 2 * m) * scale, overflow: 'hidden', border: '1px solid var(--line-2)', background: '#fff' }}>
-        <div style={{ width: pageW, transform: `scale(${scale})`, transformOrigin: 'top left', padding: m, boxSizing: 'border-box', position: 'relative', background: '#fff' }}>
-          {Array.from({ length: Math.max(0, n - 1) }).map((_, i) => (
-            <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: m + usable * (i + 1), borderTop: '1px dashed #c33', opacity: 0.5 }}>
-              <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 11, color: '#c33', fontFamily: 'Arial' }}>page {i + 2}</span>
-            </div>
-          ))}
-          <div ref={inner} style={body}>
-            {st.band ? <div style={{ background: col, padding: '14px 14px 10px', marginBottom: 4 }}>{header(true)}</div> : header(false)}
-            {model.kind === 'letter' ? (
-              <div>
-                <div style={{ margin: '24px 0 16px' }}>{model.date}</div>
-                {model.recipient && <div style={{ marginBottom: 16 }}>{model.recipient}</div>}
-                <div style={{ marginBottom: 10 }}>{model.salutation}</div>
-                {model.paragraphs.map((p, i) => <p key={i} style={{ margin: '0 0 10px' }}>{p}</p>)}
-                <div style={{ marginTop: 8 }}>{model.signoff}</div>
-                <div style={{ marginTop: 32 }}>{model.signature}</div>
-              </div>
-            ) : st.sidebar ? (
-              <div style={{ display: 'flex', gap: '0.25in', marginTop: 8 }}>
-                <div style={{ width: '32%', background: '#' + st.tint, padding: '6px 9px', boxSizing: 'border-box' }}>{model.side.map((x) => section(x, true))}</div>
-                <div style={{ flex: 1 }}>{model.main.map((x) => section(x, false))}</div>
-              </div>
-            ) : model.main.map((x) => section(x, false))}
-          </div>
+      {canBreak && (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>
+          To move a page break, point at a section, role or bullet and click <b style={{ color: 'var(--ink-2)', fontWeight: 500 }}>Start page here</b>.
+          {manualCount > 0 && <> {manualCount} break{manualCount === 1 ? '' : 's'} added · <button style={docLink} onClick={() => onBreaks([])}>Remove all</button></>}
         </div>
+      )}
+      {sidebar && model.kind === 'resume' && (
+        <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 8 }}>Page breaks can't be moved in the Sidebar template; pick another template to place them yourself.</div>
+      )}
+
+      {/* Hidden measuring column at true size */}
+      <div aria-hidden="true" style={{ position: 'absolute', left: -100000, top: 0, visibility: 'hidden', pointerEvents: 'none' }}>
+        <div ref={meas} style={{ ...body, width: sidebar ? mainW : contentW }}>
+          {blocks.map((b) => <div key={b.key} style={{ display: 'flow-root' }}>{b.node}</div>)}
+        </div>
+        {sidebar && <div ref={headMeas} style={{ ...body, width: contentW, display: 'flow-root' }}>{headerNode}</div>}
+        {sidebar && <div ref={sideMeas} style={{ ...body, width: sideW, padding: '6px 9px', boxSizing: 'border-box' }}>{model.side.map(sideSection)}</div>}
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 6 }}>The page count is a close estimate; the Google Doc may differ by a line or two. Send the Doc as a PDF (File → Download → PDF) so fonts stay exact.</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pages.map((pg, pi) => (
+          <div key={pi}>
+            <div style={{ fontSize: 10.5, color: 'var(--ink-4)', marginBottom: 4, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>PAGE {pi + 1} OF {n}</div>
+            <div style={{ width: pageW * scale, height: pageH * scale, overflow: 'hidden', border: '1px solid var(--line-2)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}>
+              <div style={{ width: pageW, height: pageH, transform: `scale(${scale})`, transformOrigin: 'top left', padding: m, boxSizing: 'border-box', background: '#fff' }}>
+                <div style={body}>
+                  {sidebar && pi === 0 && headerNode}
+                  {sidebar ? (
+                    <div style={{ display: 'flex', gap: gapW, marginTop: pi === 0 ? 8 : 0 }}>
+                      <div style={{ width: sideW, flex: '0 0 auto', background: pi === 0 ? '#' + st.tint : 'transparent', padding: pi === 0 ? '6px 9px' : 0, boxSizing: 'border-box' }}>{pi === 0 ? model.side.map(sideSection) : null}</div>
+                      <div style={{ width: mainW }}>{pg.map(blockView)}</div>
+                    </div>
+                  ) : pg.map(blockView)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-4)', marginTop: 8 }}>The page layout is a close estimate; the Google Doc may differ by a line or two. Send the Doc as a PDF (File → Download → PDF) so fonts stay exact.</div>
     </div>
   );
 }
@@ -430,7 +524,8 @@ function ResumeWorkspace({ opp, onUpdate }) {
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}
         {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 8 }}>{error}</div>}
-        <DocPreview model={model} targetPages={D.normalize(st.format).pages} onMeasure={(p) => { measured.current = p; }}/>
+        <DocPreview model={model} targetPages={D.normalize(st.format).pages} onMeasure={(p) => { measured.current = p; }}
+          onBreaks={(keys) => save({ ...st, breaks: keys })}/>
         <DocVersions versions={st.versions} onSent={markSent}/>
       </div>
     </div>

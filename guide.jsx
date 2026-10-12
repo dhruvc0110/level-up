@@ -147,12 +147,13 @@ const GUIDE_CHAPTERS = [
       ]}/>
       <GH>Resume and cover letter</GH>
       <GP>Next to Overview, each opportunity has <B>Outreach</B>, <B>Resume</B> and <B>Cover letter</B> tabs. Everything you make for a job stays with that job.</GP>
-      <GShot src="resume.jpg" caption="Resume tab: format and content on the left, a live page preview with a fit check on the right." width={760}/>
+      <GShot src="resume.jpg" caption="Resume tab: format and content on the left, the pages as they'll print on the right, with a fit check." width={760}/>
       <GSteps items={[
         <>Open the <B>Resume</B> tab, choose 1 or 2 pages and click <B>Tailor with Claude</B> (about 3–5¢, under a minute). Claude reads the job, the company profile, your persona and your whole Career profile.</>,
         <>It proposes a <B>headline</B>, a <B>summary</B>, and which achievements to show under each role, most relevant first, with wording tightened for this job (facts never change; hover a line or click <B>Original</B> to see your own words). Older roles can be <B>Title line only</B> or <B>Leave out</B>.</>,
         <>Tick or untick lines and edit any of them. <B>Job match</B> shows what the role asks for (✓ covered, ◐ partly, ▲ gap) and <B>Check before sending</B> lists what to verify.</>,
         <>Choose the look from eight templates: <B>Classic</B>, <B>Executive</B> (centred header), <B>Modern</B>, <B>Minimal</B>, <B>Banner</B> (coloured name block), <B>Sidebar</B> (two columns), <B>Compact</B> (dense one-pager) and <B>Board bio</B> (profile, selected achievements, short career history). A dot marks the two that suit emailing better than online applications. Then set fonts (pairs that Google Docs also has), text size, margins and colour. The preview updates as you go and says whether it fits (for example "About 2 lines over 1 page"); <B>Fit to 1 page</B> (or 2) tightens spacing, margins and then text size step by step until it fits.</>,
+        <>The preview shows each page separately (<B>Page 1 of 2</B>…). To move a page break, point at a section heading, role or bullet and click <B>Start page here</B>: it and everything after it move to the next page. <B>Remove</B> (above that page) undoes it, and <B>Remove all</B> clears every break you added. The breaks carry into the Google Doc, and headings always stay with the text below them. (Not available in the Sidebar template.)</>,
         <><B>More options</B>: line and section spacing, paper size, dates beside or under the title, title or company first, bullet style, headings in capitals, which contact details to show, and the sections: reorder them (↑ ↓), rename a heading (for example "Selected achievements") or hide one.</>,
         <><B>Save as P-01's look</B> (your persona's code) stores the format with the persona, so every new resume for that persona starts with it.</>,
         <>Click <B>Create Google Doc</B>. Level Up builds the document and saves it in <B>Level Up / Documents</B> in your Drive, then opens it. Edit it there, or use File → Download for Word or PDF. Each one is listed under <B>Versions</B>; click <B>Mark as sent</B> when it goes out.</>,
@@ -435,6 +436,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['12 Oct 2026', [
+          'Resume preview now shows separate pages, and you can move page breaks: point at a section, role or bullet and click Start page here. The breaks carry into the Google Doc.',
           'Pipeline is now a searchable list with the selected opportunity beside it, instead of stage columns. Stage is a detail you change on the opportunity. New key facts (location, work mode, compensation, industry, company size, date added) can be filtered, alongside stage, persona, fit, source and due date. Existing opportunities got their date added from the Inbox where it was known.',
           'Fixed: due dates showed one day early (an item due today said "1d overdue"). Adding an opportunity by hand now opens it straight away.',
           'Resume formatting: eight templates (Classic, Executive, Modern, Minimal, Banner, Sidebar, Compact, Board bio), font pairings, text size, colour, margins and spacing, Fit to pages, section order and headings, date and bullet styles, and a saved look per persona. Cover letters share the resume\u2019s look and tailored headline.',
