@@ -58,6 +58,7 @@
     lens:     { label: 'Persona strength and gaps',   def: 'sonnet', typical: { in: 8000,  out: 1800 } },
     outreach: { label: 'Outreach notes',              def: 'sonnet', typical: { in: 6000,  out: 900 } },
     documents: { label: 'Resumes and cover letters',  def: 'sonnet', typical: { in: 12000, out: 3500 } },
+    brand:    { label: 'Brand foundation',            def: 'sonnet', typical: { in: 7000,  out: 3000 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {

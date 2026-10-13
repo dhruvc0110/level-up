@@ -362,15 +362,27 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
-    id: 'brand', title: 'Brand', blurb: 'Plan and track your LinkedIn presence',
+    id: 'brand', title: 'Brand', blurb: 'A brand kit per persona, and your LinkedIn posts',
     body: () => <>
-      <GP>Brand helps you post consistently: a content calendar, a consistency score, the mix of formats, and the themes you write about.</GP>
-      <GShot src="brand.jpg" caption="Brand: consistency, format mix and the content calendar."/>
+      <GP>Brand has two tabs. <B>Foundation</B> builds a brand kit for each persona: what you want to be known for, and the LinkedIn headline and About that say it. <B>Content</B> plans and tracks your posts.</GP>
+      <GH>Foundation: a brand kit per persona</GH>
+      <GShot src="brand-foundation.jpg" caption="Foundation: content pillars with their proof and post ideas, headline options and the About section for one persona."/>
+      <GSteps items={[
+        <>Pick a persona from the row at the top. Its <B>positioning</B> line (set in <i>Personas</i>) anchors the kit.</>,
+        <>Click <B>Draft with Claude</B> (about 3–5¢, under a minute). Claude reads the persona and your Career profile and proposes 3–5 <B>content pillars</B> (themes you can credibly be known for, each with the proof behind it and post ideas), three <B>LinkedIn headline</B> options and an <B>About</B> section. Nothing is invented and nothing is posted.</>,
+        <>Edit anything: rename a pillar, change why it fits, remove proof, add or remove post ideas (<B>+ Add a pillar</B>, <B>+ Add an idea</B>). Pick the headline you prefer. Counters show LinkedIn's limits (220 characters for the headline, 2,600 for About), and the line under About shows what people see before “see more”.</>,
+        <>Read <B>Check before publishing</B> (for example, whether you can name a client publicly) and the <B>Featured</B> ideas.</>,
+        <>To change it with Claude, type an instruction (“sharper headlines”, “add a pillar on board work”) and click <B>Revise</B>. <B>Draft again</B> starts over.</>,
+        <><B>Copy headline</B> and <B>Copy About</B>, paste them into your LinkedIn profile, then click <B>Set as live on LinkedIn</B>. Only one persona can be live at a time, because you have one profile; the top of the page shows which.</>,
+      ]}/>
+      <GTip>If you change a persona after drafting its kit, the kit says so and offers <B>Draft again</B>.</GTip>
+      <GH>Content: posts</GH>
+      <GShot src="brand.jpg" caption="Content: consistency, format mix and the content calendar."/>
       <GList items={[
         <><B>New post</B>: pick a format (article, quick take, anecdote, survey, reply, professional update) and a theme, then draft, schedule or publish.</>,
         <>The <B>consistency</B> score and cadence come from the posts you mark as published.</>,
       ]}/>
-      <GTip><B>AI draft</B> here produces sample text for now. Write or paste your own until Claude drafting is switched on.</GTip>
+      <GTip><B>AI draft</B> on the Content tab still produces sample text: real drafting from your pillars is the next Brand step. Write or paste your own until then.</GTip>
     </>,
   },
   {
@@ -438,6 +450,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['12 Oct 2026', [
+          'Brand › Foundation: a brand kit for each persona. Claude proposes content pillars (with your proof and post ideas), three LinkedIn headline options and an About section; you edit, copy them to LinkedIn and mark which persona is live.',
           'Resumes: add your own bullets to any role (in the list, or on the page with + Bullet / + Below). The list now puts each line\u2019s buttons underneath it, so the wording gets the full width.',
           'Resumes: edit bullets right on the page preview, nest a bullet as a sub-bullet under the one above, and reorder bullets with ↑ ↓ (also in the list on the left). Sub-bullets carry into the Google Doc.',
           'Resume preview now shows separate pages, and you can move page breaks: point at a section, role or bullet and click Start page here. The breaks carry into the Google Doc.',

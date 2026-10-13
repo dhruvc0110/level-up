@@ -27,6 +27,8 @@ function BrandView({ posts: initialPosts }) {
   const [generating, setGenerating] = React.useState(false);
   const [instruction, setInstruction] = React.useState('');
   const [formatChooser, setFormatChooser] = React.useState(false);
+  const [tab, setTabState] = React.useState(() => { try { return localStorage.getItem('lu_brand_tab') || 'foundation'; } catch (e) { return 'foundation'; } });
+  const setTab = (t) => { setTabState(t); try { localStorage.setItem('lu_brand_tab', t); } catch (e) { /* private window */ } };
 
   const selected = posts.find(p => p.id === selectedId);
   const published = posts.filter(p => p.status === 'published');
@@ -65,8 +67,23 @@ function BrandView({ posts: initialPosts }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <BrandHeader published={published.length} scheduled={scheduled.length} drafts={drafts.length}
-                   onNew={() => setFormatChooser(true)}/>
+                   onNew={() => { setTab('content'); setFormatChooser(true); }}/>
 
+      {/* Foundation (per-persona brand kit) · Content (posts) */}
+      <div style={{ display: 'flex', gap: 2, padding: '0 28px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto' }}>
+        {[['foundation', 'Foundation'], ['content', 'Content']].map(([k, l]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            appearance: 'none', cursor: 'pointer', padding: '10px 12px', fontSize: 13, border: 'none', background: 'transparent', fontFamily: 'var(--sans)',
+            color: tab === k ? 'var(--ink-1)' : 'var(--ink-3)', borderBottom: '2px solid ' + (tab === k ? 'var(--ink-1)' : 'transparent'),
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {tab === 'foundation' ? (
+        <div className="lu-main-scroll" style={{ padding: '20px 28px 32px' }}>
+          {typeof BrandFoundation === 'function' ? <BrandFoundation/> : <div style={{ color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load Brand.</div>}
+        </div>
+      ) : (
       <div className="lu-main-scroll" style={{ padding: '20px 28px 32px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, marginBottom: 14 }}>
           <ConsistencyModule posts={posts}/>
@@ -83,6 +100,7 @@ function BrandView({ posts: initialPosts }) {
           )}
         </div>
       </div>
+      )}
 
       {formatChooser && (
         <FormatChooser onPick={createNewPost} onClose={() => setFormatChooser(false)}/>
@@ -108,7 +126,7 @@ function BrandHeader({ published, scheduled, drafts, onNew }) {
         <div className="serif-italic" style={{
           fontSize: 14, color: 'var(--ink-3)', marginTop: 4,
         }}>
-          Compounding presence. The recruiter calls itself.
+          One brand kit per persona. Compounding presence.
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
