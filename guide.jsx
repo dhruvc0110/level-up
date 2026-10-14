@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '13 Oct 2026';
+const GUIDE_UPDATED = '14 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -427,6 +427,7 @@ const GUIDE_CHAPTERS = [
         ["A resume won't import", <>Use PDF or Word <B>.docx</B> (old .doc files can't be read). Very long documents may need splitting.</>],
         ["Claude costs more than expected", <>Open <B>Settings → Claude models & usage</B> to see which job spends the most, then switch it to <B>Haiku</B>. Company profiles also pay 1¢ per web search.</>],
         ["An opportunity is missing from the Pipeline list", <>A filter or search is probably hiding it: the list says how many are shown. Click <B>Clear filters</B>.</>],
+        ["Google says “Access blocked: Authorization Error” (Error 400)", <>You opened Level Up's file from the folder. Google only allows sign-in from the web address: open <B>dhruvc0110.github.io/level-up</B> in Chrome (bookmark it, or install it as an app).</>],
         ["I see an old version after an update", <>Press <K>Cmd</K> + <K>Shift</K> + <K>R</K> once.</>],
       ].map(([q, a], i) => (
         <div key={i} style={{ padding: '12px 0', borderTop: i ? '1px solid var(--line-1)' : 'none' }}>
@@ -440,6 +441,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['14 Oct 2026', [
+          'Opening Level Up\u2019s file straight from the folder now shows a short message with a button to the web address, instead of Google\u2019s “Access blocked” error.',
+        ]],
         ['13 Oct 2026', [
           'Brand redesigned around your content rhythm: ideas from your experience, from the roles in your pipeline (never named), or your own prompt; Claude drafts, you refine with instructions and persona lenses, copy to LinkedIn and mark posted. The per-persona Foundation kits from yesterday are retired (anything drafted there is kept in your data).',
         ]],

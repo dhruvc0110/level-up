@@ -1580,7 +1580,16 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     }
   }
 
+  const LIVE_URL = 'https://dhruvc0110.github.io/level-up/';
   window.LU_INIT_PROMISE = (async function bootstrap() {
+    // Opened as a file from the folder: Google never allows sign-in from a file.
+    if (location.protocol === 'file:') {
+      screen(`<p style="margin:0 0 6px;font-size:16px;color:var(--ink-1);">Open Level Up from its web address</p>
+        <p style="margin:0;color:var(--ink-2);">This copy was opened as a file from your folder. Google only allows sign-in from the web address, so open it there.</p>
+        <a href="${LIVE_URL}" style="${BTN_PRIMARY}text-align:center;text-decoration:none;">Open Level Up</a>
+        <div style="${NOTE}">Tip: bookmark it, or in Chrome use ⋮ → Cast, save and share → Install page as app for a Dock icon.</div>`);
+      return new Promise(() => {}); // stay on this screen
+    }
     try {
       if (!LOCAL_MODE && !storedToken()) await signInScreen();
       screen('<p style="color:var(--ink-2);margin:0;">Loading your data…</p>');
