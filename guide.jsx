@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '12 Oct 2026';
+const GUIDE_UPDATED = '13 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -362,27 +362,18 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
-    id: 'brand', title: 'Brand', blurb: 'A brand kit per persona, and your LinkedIn posts',
+    id: 'brand', title: 'Brand', blurb: 'A steady stream of LinkedIn posts from three sources',
     body: () => <>
-      <GP>Brand has two tabs. <B>Foundation</B> builds a brand kit for each persona: what you want to be known for, and the LinkedIn headline and About that say it. <B>Content</B> plans and tracks your posts.</GP>
-      <GH>Foundation: a brand kit per persona</GH>
-      <GShot src="brand-foundation.jpg" caption="Foundation: content pillars with their proof and post ideas, headline options and the About section for one persona."/>
+      <GP>Brand helps you post 2–3 times a week so you show up when recruiters, hiring managers and executives search or scroll. Everything starts from one of three sources, and your personas are lenses you can apply to any post.</GP>
+      <GShot src="brand.jpg" caption="Brand: this week's rhythm, ideas from your experience and your job pipeline, your own idea, and a draft with a persona lens applied."/>
       <GSteps items={[
-        <>Pick a persona from the row at the top. Its <B>positioning</B> line (set in <i>Personas</i>) anchors the kit.</>,
-        <>Click <B>Draft with Claude</B> (about 3–5¢, under a minute). Claude reads the persona and your Career profile and proposes 3–5 <B>content pillars</B> (themes you can credibly be known for, each with the proof behind it and post ideas), three <B>LinkedIn headline</B> options and an <B>About</B> section. Nothing is invented and nothing is posted.</>,
-        <>Edit anything: rename a pillar, change why it fits, remove proof, add or remove post ideas (<B>+ Add a pillar</B>, <B>+ Add an idea</B>). Pick the headline you prefer. Counters show LinkedIn's limits (220 characters for the headline, 2,600 for About), and the line under About shows what people see before “see more”.</>,
-        <>Read <B>Check before publishing</B> (for example, whether you can name a client publicly) and the <B>Featured</B> ideas.</>,
-        <>To change it with Claude, type an instruction (“sharper headlines”, “add a pillar on board work”) and click <B>Revise</B>. <B>Draft again</B> starts over.</>,
-        <><B>Copy headline</B> and <B>Copy About</B>, paste them into your LinkedIn profile, then click <B>Set as live on LinkedIn</B>. Only one persona can be live at a time, because you have one profile; the top of the page shows which.</>,
+        <><B>Check your rhythm.</B> The top shows posts marked posted this week against your target (2, 3 or 4 a week) and the last six weeks.</>,
+        <><B>Pick a starting point.</B> <B>From your experience</B>: click <B>Suggest ideas</B> (about 1–2¢) for post ideas drawn from your Career profile. <B>From your job pipeline</B>: ideas on the themes the roles you saved or applied to in the last 60 days care about; posts never name those companies or hint that you're applying. <B>Your idea</B>: type a prompt or paste a rough draft, choose Post or Article / newsletter, and click <B>Work on it with Claude</B>.</>,
+        <><B>Draft.</B> Click <B>Draft</B> on an idea (about 2–3¢). Claude writes in your voice from facts in your record only, with a hook that works before LinkedIn's “see more”, and up to three hashtags. <B>Based on</B> shows the achievements it used; <B>Not this one</B> clears an idea.</>,
+        <><B>Refine together.</B> Edit the text directly, or type an instruction (“shorter”, “lead with the number”, “end with a question”) and click <B>Refine</B>. To view the same topic through one or more personas, click their buttons and then <B>Apply lens</B>; ✓ marks lenses already applied. <B>Undo last change</B> steps back a version.</>,
+        <><B>Check, copy and post.</B> Read <B>Check before posting</B> (it always flags a company from your pipeline if one slips into the text). Click <B>Copy for LinkedIn</B>, post it on LinkedIn yourself, then <B>Mark as posted</B>. The rhythm updates.</>,
       ]}/>
-      <GTip>If you change a persona after drafting its kit, the kit says so and offers <B>Draft again</B>.</GTip>
-      <GH>Content: posts</GH>
-      <GShot src="brand.jpg" caption="Content: consistency, format mix and the content calendar."/>
-      <GList items={[
-        <><B>New post</B>: pick a format (article, quick take, anecdote, survey, reply, professional update) and a theme, then draft, schedule or publish.</>,
-        <>The <B>consistency</B> score and cadence come from the posts you mark as published.</>,
-      ]}/>
-      <GTip><B>AI draft</B> on the Content tab still produces sample text: real drafting from your pillars is the next Brand step. Write or paste your own until then.</GTip>
+      <GTip>Drafts and posted items are listed under the sources. Nothing is ever posted for you.</GTip>
     </>,
   },
   {
@@ -449,6 +440,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['13 Oct 2026', [
+          'Brand redesigned around your content rhythm: ideas from your experience, from the roles in your pipeline (never named), or your own prompt; Claude drafts, you refine with instructions and persona lenses, copy to LinkedIn and mark posted. The per-persona Foundation kits from yesterday are retired (anything drafted there is kept in your data).',
+        ]],
         ['12 Oct 2026', [
           'Brand › Foundation: a brand kit for each persona. Claude proposes content pillars (with your proof and post ideas), three LinkedIn headline options and an About section; you edit, copy them to LinkedIn and mark which persona is live.',
           'Resumes: add your own bullets to any role (in the list, or on the page with + Bullet / + Below). The list now puts each line\u2019s buttons underneath it, so the wording gets the full width.',
