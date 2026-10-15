@@ -16,9 +16,8 @@ function BrandView() {
   const [, bump] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => {
     const on = () => bump();
-    window.addEventListener('lu:brand-changed', on);
-    window.addEventListener('lu:opportunities-changed', on);
-    return () => { window.removeEventListener('lu:brand-changed', on); window.removeEventListener('lu:opportunities-changed', on); };
+    ['lu:brand-changed', 'lu:opportunities-changed', 'lu:model-changed'].forEach((e) => window.addEventListener(e, on));
+    return () => ['lu:brand-changed', 'lu:opportunities-changed', 'lu:model-changed'].forEach((e) => window.removeEventListener(e, on));
   }, []);
   const [selected, setSelected] = React.useState(null);
   const [busy, setBusy] = React.useState(null); // which action is running
@@ -60,6 +59,7 @@ function BrandTop() {
       <div>
         <h1 className="serif" style={{ margin: 0, fontSize: 30, fontWeight: 400, letterSpacing: '-0.02em' }}>Brand</h1>
         <div className="serif-italic" style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 4 }}>Show up when recruiters and executives look.</div>
+        <div style={{ marginTop: 8 }}><ModelPicker task="brand"/></div>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 22, flexWrap: 'wrap' }}>
         <div>
@@ -147,7 +147,7 @@ function OwnIdea({ busy, run }) {
         <select aria-label="Format" value={format} onChange={(e) => setFormat(e.target.value)} style={{ ...brInput, width: 'auto', padding: '4px 6px', fontSize: 12 }}>
           <option value="post">Post</option><option value="article">Article / newsletter</option>
         </select>
-        <Btn size="s" variant="primary" icon="sparkles" disabled={!!busy || !text.trim()} onClick={go}>{busy === 'own' ? 'Working…' : 'Work on it with Claude'}</Btn>
+        <Btn size="s" variant="primary" icon="sparkles" disabled={!!busy || !text.trim()} onClick={go}>{busy === 'own' ? 'Working…' : 'Work on it with ' + aiName('brand')}</Btn>
         <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>about 2–3¢</span>
       </div>}>
       <textarea aria-label="Your idea or rough draft" value={text} onChange={(e) => setText(e.target.value)} rows={5}
@@ -217,7 +217,7 @@ function PostEditor({ post, busy, run }) {
   if (!post.body) {
     return (
       <div style={{ padding: 20, fontSize: 13, color: 'var(--ink-3)' }}>
-        {busy && busy.startsWith('draft') || busy === 'own' ? 'Claude is drafting… about 20–40 seconds.' : post.error ? <>This draft didn’t finish: {post.error}. <button style={brLink} onClick={refine}>Try again</button> · <button style={brLink} onClick={() => B.removePost(post.id)}>Delete</button></> : <button style={brLink} onClick={refine}>Draft it</button>}
+        {busy && busy.startsWith('draft') || busy === 'own' ? aiName('brand') + ' is drafting… about 20–40 seconds.' : post.error ? <>This draft didn’t finish: {post.error}. <button style={brLink} onClick={refine}>Try again</button> · <button style={brLink} onClick={() => B.removePost(post.id)}>Delete</button></> : <button style={brLink} onClick={refine}>Draft it</button>}
       </div>
     );
   }

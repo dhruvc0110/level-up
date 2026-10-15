@@ -11,8 +11,8 @@ function NetworkingView() {
   const [, bump] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => {
     const on = () => bump();
-    ['lu:networking-changed', 'lu:contacts-changed', 'lu:opportunities-changed'].forEach((e) => window.addEventListener(e, on));
-    return () => ['lu:networking-changed', 'lu:contacts-changed', 'lu:opportunities-changed'].forEach((e) => window.removeEventListener(e, on));
+    ['lu:networking-changed', 'lu:contacts-changed', 'lu:opportunities-changed', 'lu:model-changed'].forEach((e) => window.addEventListener(e, on));
+    return () => ['lu:networking-changed', 'lu:contacts-changed', 'lu:opportunities-changed', 'lu:model-changed'].forEach((e) => window.removeEventListener(e, on));
   }, []);
   const [group, setGroup] = React.useState('reconnect');
   const [q, setQ] = React.useState('');
@@ -36,7 +36,10 @@ function NetworkingView() {
           <h1 className="serif" style={{ margin: 0, fontSize: 30, fontWeight: 400, letterSpacing: '-0.02em' }}>Outreach</h1>
           <div className="serif-italic" style={{ fontSize: 14, color: 'var(--ink-3)', marginTop: 4 }}>Build and extend your network, before a role exists.</div>
         </div>
-        <Btn size="s" variant="outline" icon="plus" onClick={() => setAdding(true)}>Add a person</Btn>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <ModelPicker task="networking"/>
+          <Btn size="s" variant="outline" icon="plus" onClick={() => setAdding(true)}>Add a person</Btn>
+        </div>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(260px, 340px) minmax(0, 1fr)' }}>
@@ -190,7 +193,7 @@ function PersonPanel({ p }) {
             <datalist id="nw-people">{people.slice(0, 2000).map((x) => <option key={x.id} value={x.label}/>)}</datalist>
           </>
         )}
-        <Btn size="s" variant="primary" icon="sparkles" disabled={busy} onClick={start}>{busy && !t ? 'Drafting…' : 'Draft with Claude'}</Btn>
+        <Btn size="s" variant="primary" icon="sparkles" disabled={busy} onClick={start}>{busy && !t ? 'Drafting…' : 'Draft with ' + aiName('networking')}</Btn>
         <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>about 1–2¢ per turn</span>
       </div>
       {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginTop: 8 }}>{error}</div>}
@@ -250,7 +253,7 @@ function Conversation({ p, t, busy, setBusy, setError, onDeleted }) {
       {/* Chat */}
       <div style={{ border: '1px solid var(--line-1)', borderRadius: 4, display: 'flex', flexDirection: 'column', minHeight: 380, maxHeight: 560 }}>
         <div ref={chatEnd} style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {!t.messages.length && <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{busy ? 'Claude is writing the first draft…' : 'No messages yet.'}</div>}
+          {!t.messages.length && <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{busy ? aiName('networking') + ' is writing the first draft…' : 'No messages yet.'}</div>}
           {t.messages.map((m, i) => (
             <div key={i} style={{
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%', fontSize: 12.5, lineHeight: 1.5, padding: '7px 10px', borderRadius: 6,
@@ -260,7 +263,7 @@ function Conversation({ p, t, busy, setBusy, setError, onDeleted }) {
               {m.v && <div style={{ marginTop: 3 }}><button style={{ ...nwLink, fontSize: 11 }} onClick={() => setView(m.v - 1 === t.drafts.length - 1 ? null : m.v - 1)}>version {m.v}</button></div>}
             </div>
           ))}
-          {busy && t.messages.length > 0 && <div style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--ink-3)' }}>Claude is thinking…</div>}
+          {busy && t.messages.length > 0 && <div style={{ alignSelf: 'flex-start', fontSize: 12, color: 'var(--ink-3)' }}>{aiName('networking')} is thinking…</div>}
         </div>
         <div style={{ borderTop: '1px solid var(--line-1)', padding: 10 }}>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>

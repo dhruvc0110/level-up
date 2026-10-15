@@ -368,7 +368,7 @@ function DetailDrafts({ opp, onUpdate, generating, error }) {
         marginBottom: 14,
       }}>
         <div>
-          <span className="eyebrow">Outreach drafts</span>
+          <span className="eyebrow">Outreach drafts</span> <ModelPicker task="outreach" compact/>
         </div>
         <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)' }}>
           {drafts.length} {drafts.length === 1 ? 'DRAFT' : 'DRAFTS'}

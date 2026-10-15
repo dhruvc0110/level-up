@@ -409,6 +409,8 @@ function docFileName(opp, what) {
 
 // ── Resume workspace ────────────────────────────────────────────────────
 function ResumeWorkspace({ opp, onUpdate }) {
+  const [, bumpModel] = React.useReducer((x) => x + 1, 0); // redraw labels when the model changes
+  React.useEffect(() => { window.addEventListener('lu:model-changed', bumpModel); return () => window.removeEventListener('lu:model-changed', bumpModel); }, []);
   const D = window.LU_DOCS;
   const c = window.LU_CORE.doc().career || {};
   const docs = opp.docs || {};
@@ -460,7 +462,7 @@ function ResumeWorkspace({ opp, onUpdate }) {
   };
   const tailor = async () => {
     if (st && !window.confirm('Tailor again? Your ticks and edits on this resume will be replaced. Created Google Docs are kept.')) return;
-    setBusy('Claude is reading the job and your profile… about 30–60 seconds.'); setError(null);
+    setBusy(aiName('documents') + ' is reading the job and your profile… about 30–60 seconds.'); setError(null);
     try {
       const fresh = await D.tailorResume(opp, (st && st.format && st.format.pages) || pages);
       const look = persona && persona.docFormat ? { ...persona.docFormat, pages } : { ...D.DEFAULT_FORMAT, pages };
@@ -477,8 +479,9 @@ function ResumeWorkspace({ opp, onUpdate }) {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <select aria-label="Target length" value={pages} onChange={(e) => setPages(+e.target.value)} style={docSel}><option value={2}>2 pages</option><option value={1}>1 page</option></select>
-          <Btn variant="primary" size="m" icon="sparkles" disabled={!!busy || !(c.achievements || []).length} onClick={tailor}>{busy ? 'Tailoring…' : 'Tailor with Claude'}</Btn>
-          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>about 3–5¢</span>
+          <Btn variant="primary" size="m" icon="sparkles" disabled={!!busy || !(c.achievements || []).length} onClick={tailor}>{busy ? 'Tailoring…' : 'Tailor with ' + aiName('documents')}</Btn>
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>about 3–5¢ with Claude Sonnet</span>
+          <ModelPicker task="documents" compact/>
         </div>
         {!(c.achievements || []).length && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>Your Career profile is empty: add your resumes there first.</div>}
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>{busy}</div>}
@@ -642,12 +645,13 @@ function ResumeWorkspace({ opp, onUpdate }) {
             </span>
           ))}
         </div>
-        <div style={{ marginTop: 16 }}><button style={docLink} disabled={!!busy} onClick={tailor}>Tailor again with Claude</button></div>
+        <div style={{ marginTop: 16 }}><button style={docLink} disabled={!!busy} onClick={tailor}>{'Tailor again with ' + aiName('documents')}</button></div>
       </div>
 
       <div style={{ overflow: 'auto', padding: '18px 22px 30px', background: 'var(--bg-0)' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
           <Btn variant="primary" size="m" icon="arrow-right" disabled={!!busy} onClick={create}>{busy && busy.startsWith('Building') ? 'Creating…' : 'Create Google Doc'}</Btn>
+          <ModelPicker task="documents"/>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Saved to Level Up / Documents in your Drive. Edit it there, or download as Word or PDF.</span>
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}
@@ -662,6 +666,8 @@ function ResumeWorkspace({ opp, onUpdate }) {
 
 // ── Cover letter workspace ──────────────────────────────────────────────
 function LetterWorkspace({ opp, onUpdate }) {
+  const [, bumpModel] = React.useReducer((x) => x + 1, 0); // redraw labels when the model changes
+  React.useEffect(() => { window.addEventListener('lu:model-changed', bumpModel); return () => window.removeEventListener('lu:model-changed', bumpModel); }, []);
   const D = window.LU_DOCS;
   const docs = opp.docs || {};
   const st = docs.letter || null;
@@ -670,7 +676,7 @@ function LetterWorkspace({ opp, onUpdate }) {
   const [instruction, setInstruction] = React.useState('');
   const save = (next) => onUpdate({ ...opp, docs: { ...(opp.docs || {}), letter: next } });
   const draft = async (revise) => {
-    setBusy('Claude is drafting… about 20 seconds.'); setError(null);
+    setBusy(aiName('documents') + ' is drafting… about 20 seconds.'); setError(null);
     try {
       const d = await D.draftLetter(opp, revise ? { base: st.paragraphs, instruction } : {});
       const format = (st && st.format) || (docs.resume && docs.resume.format) || D.DEFAULT_FORMAT;
@@ -685,7 +691,7 @@ function LetterWorkspace({ opp, onUpdate }) {
         <div className="serif" style={{ fontSize: 20, color: 'var(--ink-1)', marginBottom: 6 }}>A cover letter for this role</div>
         <div style={{ fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.6, marginBottom: 16 }}>Claude drafts a 250–350 word letter from the job, the company profile, your persona's voice and your strongest proof for it. Use one only when a posting asks for it. You edit, then create a Google Doc with the same header as your resume.</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Btn variant="primary" size="m" icon="sparkles" disabled={!!busy} onClick={() => draft(false)}>{busy ? 'Drafting…' : 'Draft with Claude'}</Btn>
+          <Btn variant="primary" size="m" icon="sparkles" disabled={!!busy} onClick={() => draft(false)}>{busy ? 'Drafting…' : 'Draft with ' + aiName('documents')}</Btn>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>about 2¢</span>
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>{busy}</div>}
@@ -742,6 +748,7 @@ function LetterWorkspace({ opp, onUpdate }) {
       <div style={{ overflow: 'auto', padding: '18px 22px 30px', background: 'var(--bg-0)' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
           <Btn variant="primary" size="m" icon="arrow-right" disabled={!!busy} onClick={create}>{busy && busy.startsWith('Building') ? 'Creating…' : 'Create Google Doc'}</Btn>
+          <ModelPicker task="documents"/>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Saved to Level Up / Documents in your Drive.</span>
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}

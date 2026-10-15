@@ -12,6 +12,7 @@ function SettingsView() {
         <div style={{ maxWidth: 760 }}>
           <AppearancePanel/>
           <AnthropicKeyPanel/>
+          <OtherKeysPanel/>
           <ClaudeUsagePanel/>
           <GmailPanel/>
           <LinkedInJobsPanel/>
@@ -154,9 +155,9 @@ function ClaudeUsagePanel() {
   const note = { fontSize: 12, color: 'var(--ink-3)' };
 
   return (
-    <SettingsPanel title="Claude models & usage" eyebrow="AI · COST">
+    <SettingsPanel title="AI models & usage" eyebrow="AI · COST">
       <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>
-        Choose which Claude model does each job. Cheaper models cost far less; switch one, check the results it gives you, and switch back if they're not good enough. The cost next to each model is a rough figure for one item.
+        Choose which model does each job by default. Drafting screens (Brand, Outreach, Resume, Cover letter) also let you switch model for one visit. Cheaper models cost far less; try one, check its results, and switch back if they're not good enough. OpenAI and Gemini models appear once their key is added above; company profiles and resume import need Claude. The cost next to each model is a rough figure for one item.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
@@ -186,11 +187,19 @@ function ClaudeUsagePanel() {
               </div>
               <select aria-label={'Model for ' + t.label} value={t.model} onChange={(e) => choose(t.key, e.target.value)}
                 style={{ flex: '0 1 250px', maxWidth: '100%', fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '5px 6px' }}>
-                {models.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.label} · ≈{fmtUsd(LU_API.estimateCost(t.key, m.key))} each{m.key === t.def ? ' (default)' : ''}
-                  </option>
-                ))}
+                {['anthropic', 'openai', 'google'].filter((pv) => !(t.claudeOnly && pv !== 'anthropic')).map((pv) => {
+                  const ms = models.filter((m) => m.provider === pv);
+                  if (!ms.length) return null;
+                  return (
+                    <optgroup key={pv} label={ms[0].providerLabel + (ms[0].hasKey ? '' : ' (add a key above)')}>
+                      {ms.map((m) => (
+                        <option key={m.key} value={m.key} disabled={!m.hasKey}>
+                          {m.label} · ≈{fmtUsd(LU_API.estimateCost(t.key, m.key))} each{m.key === t.def ? ' (default)' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
           );
@@ -198,9 +207,75 @@ function ClaudeUsagePanel() {
       </div>
 
       <p style={{ ...note, lineHeight: 1.6, margin: '14px 0 0' }}>
-        Counting started when this panel was added, so earlier spend isn't included. Company profiles also pay 1¢ per web search. For a hard ceiling, set a monthly limit in the Anthropic Console under Settings → Limits.
+        {(() => {
+          const by = {};
+          Object.values(cur).forEach((t) => Object.entries(t.byProvider || {}).forEach(([k, v]) => { by[k] = (by[k] || 0) + v; }));
+          const parts = Object.entries(by).filter(([, v]) => v > 0).map(([k, v]) => ({ anthropic: 'Claude', openai: 'OpenAI', google: 'Gemini' }[k] || k) + ' ' + fmtUsd(v));
+          return parts.length > 1 ? <>This month by provider: {parts.join(' · ')}. </> : null;
+        })()}
+        Counting started when this panel was added, so earlier spend isn't included. Company profiles also pay 1¢ per web search. For a hard ceiling, set monthly limits with each provider (Anthropic Console, OpenAI and Google AI Studio billing settings).
       </p>
     </SettingsPanel>
+  );
+}
+
+// ── OpenAI and Google Gemini keys ───────────────────────────────────────
+
+const OTHER_PROVIDERS = [
+  { key: 'openai', label: 'OpenAI', models: 'GPT-6 Astra and GPT-6 Luna', host: 'api.openai.com', placeholder: 'sk-proj-...', get: 'https://platform.openai.com/api-keys', getLabel: 'platform.openai.com' },
+  { key: 'gemini', label: 'Google Gemini', models: 'Gemini 4 Argon and Gemini 3.8 Flash', host: 'generativelanguage.googleapis.com', placeholder: 'AIza...', get: 'https://aistudio.google.com/apikey', getLabel: 'aistudio.google.com' },
+];
+
+function OtherKeysPanel() {
+  return (
+    <SettingsPanel title="Other AI providers" eyebrow="AI · OPENAI · GOOGLE">
+      <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 14px' }}>
+        Optional. Add a key to use that provider's models in Level Up. Keys are saved in your Level Up data file in your Google Drive and only ever sent from your browser to that provider.
+      </p>
+      {OTHER_PROVIDERS.map((p) => <ProviderKeyRow key={p.key} p={p}/>)}
+    </SettingsPanel>
+  );
+}
+
+function ProviderKeyRow({ p }) {
+  const [status, setStatus] = React.useState(null);
+  const [value, setValue] = React.useState('');
+  const [editing, setEditing] = React.useState(false);
+  const [busy, setBusy] = React.useState(null);
+  const [result, setResult] = React.useState(null);
+  const url = '/api/settings/' + p.key + '_api_key';
+  const load = async () => { try { setStatus(await LU_API.get(url)); } catch (e) { setResult({ ok: false, error: e.message }); } };
+  React.useEffect(() => { load(); }, []);
+  const save = async () => { if (!value.trim()) return; setBusy('save'); setResult(null); try { await LU_API.put(url, { value: value.trim() }); setValue(''); setEditing(false); await load(); } finally { setBusy(null); } };
+  const remove = async () => { if (!window.confirm(`Remove the ${p.label} key? Jobs set to its models go back to Claude.`)) return; await LU_API.delete(url); setResult(null); await load(); };
+  const test = async () => { setBusy('test'); setResult(null); try { setResult(await LU_API.post(url + '/test')); } finally { setBusy(null); } };
+  const has = status && status.hasValue;
+  return (
+    <div style={{ padding: '12px 0', borderTop: '1px solid var(--line-1)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div><span style={{ fontSize: 14, color: 'var(--ink-1)' }}>{p.label}</span> <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>· {p.models}</span></div>
+        {has && !editing && <span className="mono" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{status.masked}</span>}
+      </div>
+      {(!has || editing) ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input type="password" aria-label={p.label + ' API key'} value={value} onChange={(e) => setValue(e.target.value)} placeholder={p.placeholder} spellCheck={false} autoComplete="off"
+            onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+            style={{ flex: '1 1 260px', padding: '8px 10px', background: 'var(--bg-2)', border: '1px solid var(--line-2)', borderRadius: 3, color: 'var(--ink-1)', fontFamily: 'var(--mono)', fontSize: 12.5, outline: 'none' }}/>
+          <Btn variant="primary" size="s" onClick={save} disabled={!!busy || !value.trim()}>{busy === 'save' ? 'Saving…' : 'Save key'}</Btn>
+          {editing && <Btn variant="ghost" size="s" onClick={() => { setEditing(false); setValue(''); }}>Cancel</Btn>}
+          <a href={p.get} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink-3)', fontSize: 12, fontFamily: 'var(--mono)' }}>Get one at {p.getLabel} →</a>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Btn variant="ghost" size="s" icon="sparkles" onClick={test} disabled={!!busy}>{busy === 'test' ? 'Testing…' : 'Test connection'}</Btn>
+          <Btn variant="ghost" size="s" onClick={() => setEditing(true)}>Replace</Btn>
+          <Btn variant="ghost" size="s" onClick={remove} icon="trash"/>
+          {result && (result.ok
+            ? <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}><Icon name="check" size={13} style={{ color: 'oklch(70% 0.12 145)', verticalAlign: '-2px' }}/> {result.model} replied “{result.response}”</span>
+            : <span style={{ fontSize: 12.5, color: 'var(--signal)' }}>{result.error}</span>)}
+        </div>
+      )}
+    </div>
   );
 }
 

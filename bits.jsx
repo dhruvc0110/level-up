@@ -609,7 +609,43 @@ function NetworkAt({ company, hiringManager }) {
   );
 }
 
+// Model for this drafting screen, for the rest of this visit. The Settings
+// choice is the default; OpenAI and Gemini models appear once their key is added.
+function ModelPicker({ task, compact }) {
+  const [, bump] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => {
+    const on = () => bump();
+    window.addEventListener('lu:model-changed', on);
+    return () => window.removeEventListener('lu:model-changed', on);
+  }, []);
+  if (!window.LU_API || typeof LU_API.claudeModels !== 'function' || !LU_API.setSessionModel) return null;
+  const { models, tasks } = LU_API.claudeModels();
+  const t = tasks.find((x) => x.key === task);
+  if (!t) return null;
+  const options = models.filter((m) => m.hasKey && !(t.claudeOnly && m.provider !== 'anthropic'));
+  const current = LU_API.sessionModel(task);
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--sans)' }} title="Which AI model drafts here. Settings sets the default.">
+      {!compact && 'Model'}
+      <select aria-label="AI model" value={current} onChange={(e) => LU_API.setSessionModel(task, e.target.value === t.saved ? null : e.target.value)}
+        style={{ background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '3px 6px', fontSize: 12, fontFamily: 'var(--sans)' }}>
+        {options.map((m) => <option key={m.key} value={m.key}>{m.label}{m.key === t.saved ? ' (default)' : ''}</option>)}
+      </select>
+    </label>
+  );
+}
+
+// Short name of the model drafting for a task: "Claude", "GPT-6 Astra", "Gemini 4 Argon"…
+function aiName(task) {
+  try {
+    const { models } = LU_API.claudeModels();
+    const m = models.find((x) => x.key === LU_API.sessionModel(task));
+    return !m || m.provider === 'anthropic' ? 'Claude' : m.label;
+  } catch (e) { return 'Claude'; }
+}
+
 Object.assign(window, {
+  ModelPicker, aiName,
   parseDay,
   Icon, PersonaTag, PersonaDot, stageColor, StageBar,
   FitStars, DueChip, dueState, WarmthDot,

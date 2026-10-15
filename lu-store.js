@@ -40,11 +40,29 @@
   // Claude models Dhruv can pick per task (Settings → Claude models & usage).
   // Prices are USD per million tokens (platform.claude.com/docs/en/about-claude/pricing,
   // checked 2026-10-11): input, output, 5-minute cache write, cache read.
+  // OpenAI and Google models (added 2026-10-15) use their own keys; prices from
+  // developers.openai.com and ai.google.dev (checked 2026-10-15). Gemini prices are
+  // introductory: Argon $4/$20 from 1 Dec 2026, Flash $1.50/$7.50 from 1 Jan 2027.
   const MODELS = {
-    haiku:  { id: 'claude-haiku-5-5',  label: 'Haiku 5.5',  note: 'fastest, cheapest', price: { in: 0.10, out: 0.50, cw: 0.125, cr: 0.01 } },
-    sonnet: { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', note: 'balanced',          price: { in: 2,    out: 10,   cw: 2.50,  cr: 0.10 } },
-    opus:   { id: 'claude-opus-5-5',   label: 'Opus 5.5',   note: 'most capable',      price: { in: 4,    out: 20,   cw: 5,     cr: 0.20 } },
+    haiku:  { id: 'claude-haiku-5-5',  provider: 'anthropic', label: 'Claude Haiku 5.5',  note: 'fastest, cheapest', price: { in: 0.10, out: 0.50, cw: 0.125, cr: 0.01 } },
+    sonnet: { id: 'claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5', note: 'balanced',          price: { in: 2,    out: 10,   cw: 2.50,  cr: 0.10 } },
+    opus:   { id: 'claude-opus-5-5',   provider: 'anthropic', label: 'Claude Opus 5.5',   note: 'most capable',      price: { in: 4,    out: 20,   cw: 5,     cr: 0.20 } },
+    luna:   { id: 'gpt-6-luna',        provider: 'openai',    label: 'GPT-6 Luna',        note: 'OpenAI, fast and cheap', price: { in: 0.10, out: 0.50, cw: 0.125, cr: 0.01 } },
+    astra:  { id: 'gpt-6-astra',       provider: 'openai',    label: 'GPT-6 Astra',       note: 'OpenAI flagship',   price: { in: 10,   out: 50,   cw: 12.5,  cr: 1 } },
+    flash:  { id: 'gemini-3.8-flash',  provider: 'google',    label: 'Gemini 3.8 Flash',  note: 'Google, fast',      price: { in: 0.75, out: 3.75, cw: 0,     cr: 0.075 } },
+    argon:  { id: 'gemini-4-argon',    provider: 'google',    label: 'Gemini 4 Argon',    note: 'Google flagship',   price: { in: 2,    out: 10,   cw: 0,     cr: 0.20 } },
   };
+  const PROVIDERS = {
+    anthropic: { label: 'Claude (Anthropic)', keyField: 'anthropicApiKey', test: 'haiku' },
+    openai:    { label: 'OpenAI',             keyField: 'openaiApiKey',    test: 'luna' },
+    google:    { label: 'Google Gemini',      keyField: 'geminiApiKey',    test: 'flash' },
+  };
+  // Jobs only Claude can do here: web search (company profiles) and reading PDFs (resume import).
+  const CLAUDE_ONLY = ['company', 'career', 'test'];
+  const hasKey = (provider) => !!(DOC && DOC.settings && DOC.settings[PROVIDERS[provider].keyField]);
+  const usable = (key, task) => MODELS[key] && hasKey(MODELS[key].provider) && !(CLAUDE_ONLY.includes(task) && MODELS[key].provider !== 'anthropic');
+  // A drafting screen can pick a model for the rest of this visit (not saved).
+  const SESSION_MODEL = {};
   const WEB_SEARCH_USD = 0.01; // per search
   // Each task Level Up sends to Claude. `typical` is a rough per-call size, used
   // for the cost hint until real calls have been counted.
@@ -63,8 +81,9 @@
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {
+    if (usable(SESSION_MODEL[task], task)) return SESSION_MODEL[task];
     const pick = DOC && DOC.settings && DOC.settings.models && DOC.settings.models[task];
-    return MODELS[pick] ? pick : (TASKS[task] ? TASKS[task].def : 'sonnet');
+    return usable(pick, task) ? pick : (TASKS[task] ? TASKS[task].def : 'sonnet');
   }
   function modelFor(task) { return MODELS[modelKeyFor(task)].id; }
   function priceOf(modelId) {
@@ -94,6 +113,8 @@
     t.calls++; t.in += u.in; t.out += u.out; t.cw += u.cw; t.cr += u.cr; t.searches += u.searches;
     t.cost += cost; t.saved += saved;
     t.models[modelId] = (t.models[modelId] || 0) + 1;
+    const prov = (Object.values(MODELS).find((x) => x.id === modelId || (modelId || '').startsWith(x.id)) || {}).provider || 'anthropic';
+    t.byProvider = t.byProvider || {}; t.byProvider[prov] = (t.byProvider[prov] || 0) + cost;
     markDirty();
     window.dispatchEvent(new CustomEvent('lu:usage-changed'));
   }
@@ -579,6 +600,12 @@
   // re-reads them at 5% of the price. Instructions under ~512 tokens aren't cached
   // and cost nothing extra.
   async function claude(model, system, user, maxTokens, extra, task) {
+    const entry = Object.values(MODELS).find((m) => m.id === model);
+    if (entry && entry.provider !== 'anthropic') {
+      // Other providers get plain text only: no web search, no document blocks.
+      if ((extra && extra.tools) || typeof user !== 'string') throw new Error(entry.label + ' can\'t do this job in Level Up; choose a Claude model for it in Settings.');
+      return entry.provider === 'openai' ? callOpenAI(entry, system, user, maxTokens, task) : callGemini(entry, system, user, maxTokens, task);
+    }
     const key = DOC.settings.anthropicApiKey;
     if (!key) throw new Error('No Claude API key set. Add it in Settings.');
     // Not with server tools (web search): there the cache write cost more than it saved.
@@ -608,6 +635,64 @@
       if (RETRY.includes(r.status) && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
       throw new Error((j.error && j.error.message) || ('Claude error ' + r.status));
     }
+  }
+
+  // ── OpenAI and Google Gemini ─────────────────────────────────────────────
+  // Both answer in the same shape as Claude ({ content: [{ type: 'text', text }], usage })
+  // so every screen works unchanged. Reasoning models spend part of the output
+  // budget thinking, so they get more room than the visible answer needs.
+  const RETRY_STATUS = [429, 500, 502, 503, 504, 529];
+  const sysText = (system) => (Array.isArray(system) ? system.map((b) => b.text || '').join('\n\n') : (system || ''));
+  async function providerFetch(entry, url, init) {
+    for (let attempt = 0; ; attempt++) {
+      let r, j;
+      try { r = await fetch(url, init); j = await r.json().catch(() => ({})); }
+      catch (e) {
+        if (attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
+        // OpenAI hides key errors from browsers: a rejected key looks like a network failure.
+        if (entry.provider === 'openai') throw new Error('OpenAI didn\'t answer. Most often the key is wrong or has no credit: check it at platform.openai.com, then Replace it in Settings. If it is fine, try again shortly.');
+        throw new Error('Could not reach ' + PROVIDERS[entry.provider].label + ' (' + (e.message || e) + ')');
+      }
+      if (r.ok) return j;
+      if (RETRY_STATUS.includes(r.status) && attempt < 2) { await new Promise((res) => setTimeout(res, attempt ? 6000 : 2000)); continue; }
+      const msg = (j.error && (j.error.message || j.error.status)) || ('error ' + r.status);
+      if (r.status === 401 || r.status === 403) throw new Error(PROVIDERS[entry.provider].label + ' didn\'t accept the key (' + String(msg).slice(0, 120) + '). Check it in Settings.');
+      throw new Error(entry.label + ': ' + msg);
+    }
+  }
+  async function callOpenAI(entry, system, user, maxTokens, task) {
+    const key = DOC.settings.openaiApiKey;
+    if (!key) throw new Error('No OpenAI key set. Add it in Settings.');
+    const sys = sysText(system);
+    const j = await providerFetch(entry, 'https://api.openai.com/v1/chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+      body: JSON.stringify({ model: entry.id, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: user }],
+        max_completion_tokens: Math.min(64000, Math.max(6000, maxTokens * 3)), reasoning_effort: 'low' }),
+    });
+    const choice = (j.choices || [])[0] || {};
+    const text = (choice.message && choice.message.content) || '';
+    if (!text && choice.finish_reason === 'length') throw new Error(entry.label + ' ran out of room before answering. Try again, or pick another model.');
+    const u = j.usage || {}, cached = (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0;
+    const usage = { input_tokens: (u.prompt_tokens || 0) - cached, output_tokens: u.completion_tokens || 0, cache_read_input_tokens: cached };
+    try { recordUsage(task, entry.id, usage); } catch (e) { /* the meter must never break a call */ }
+    return { model: j.model || entry.id, content: [{ type: 'text', text }], usage, provider: 'openai' };
+  }
+  async function callGemini(entry, system, user, maxTokens, task) {
+    const key = DOC.settings.geminiApiKey;
+    if (!key) throw new Error('No Google Gemini key set. Add it in Settings.');
+    const sys = sysText(system);
+    const j = await providerFetch(entry, 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(entry.id) + ':generateContent', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify(Object.assign({ contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { maxOutputTokens: Math.min(64000, Math.max(6000, maxTokens * 3)) } }, sys ? { systemInstruction: { parts: [{ text: sys }] } } : {})),
+    });
+    const cand = (j.candidates || [])[0] || {};
+    const text = ((cand.content && cand.content.parts) || []).filter((x) => !x.thought && x.text).map((x) => x.text).join('');
+    if (!text) throw new Error(entry.label + ' returned no answer' + (cand.finishReason ? ' (' + cand.finishReason + ')' : '') + '. Try again, or pick another model.');
+    const m = j.usageMetadata || {}, cached = m.cachedContentTokenCount || 0;
+    const usage = { input_tokens: (m.promptTokenCount || 0) - cached, output_tokens: (m.candidatesTokenCount || 0) + (m.thoughtsTokenCount || 0), cache_read_input_tokens: cached };
+    try { recordUsage(task, entry.id, usage); } catch (e) { /* the meter must never break a call */ }
+    return { model: j.modelVersion || entry.id, content: [{ type: 'text', text }], usage, provider: 'google' };
   }
 
   // Built from the personas in Settings → Personas (retired ones left out), so a
@@ -1396,6 +1481,20 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       if (method === 'PUT') { s.anthropicApiKey = (body && body.value || '').trim(); s.anthropicKeyUpdatedAt = nowIso(); markDirty(); await flush(); return { hasValue: true }; }
       if (method === 'DELETE') { delete s.anthropicApiKey; delete s.anthropicKeyUpdatedAt; markDirty(); await flush(); return { deleted: true }; }
     }
+    const pk = (/^settings\/(openai|gemini)_api_key(\/test)?$/.exec(p) || []);
+    if (pk[1]) {
+      const prov = pk[1] === 'gemini' ? 'google' : 'openai', field = PROVIDERS[prov].keyField, s = DOC.settings;
+      if (pk[2] && method === 'POST') {
+        try {
+          const e = MODELS[PROVIDERS[prov].test];
+          const r = await (prov === 'openai' ? callOpenAI : callGemini)(e, null, 'Reply with exactly: ok', 20, 'test');
+          return { ok: true, model: r.model, response: replyText(r).trim() };
+        } catch (e) { return { ok: false, error: String(e.message || e).slice(0, 300) }; }
+      }
+      if (method === 'GET') return { hasValue: !!s[field], masked: maskSecret(s[field]), updatedAt: s[field + 'At'] || null };
+      if (method === 'PUT') { s[field] = (body && body.value || '').trim(); s[field + 'At'] = nowIso(); markDirty(); await flush(); return { hasValue: true }; }
+      if (method === 'DELETE') { delete s[field]; delete s[field + 'At']; markDirty(); await flush(); return { deleted: true }; }
+    }
     if (p === 'settings/anthropic_api_key/test' && method === 'POST') {
       try {
         const r = await claude(CONFIG.testModel, null, 'Reply with exactly: ok', 20, null, 'test');
@@ -1491,12 +1590,21 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     // Settings → Claude models & usage
     claudeModels() {
       return {
-        models: Object.entries(MODELS).map(([k, m]) => ({ key: k, id: m.id, label: m.label, note: m.note })),
-        tasks: Object.entries(TASKS).filter(([, t]) => !t.hidden).map(([k, t]) => ({ key: k, label: t.label, model: modelKeyFor(k), def: t.def })),
+        models: Object.entries(MODELS).map(([k, m]) => ({ key: k, id: m.id, label: m.label, note: m.note, provider: m.provider, providerLabel: PROVIDERS[m.provider].label, hasKey: hasKey(m.provider) })),
+        tasks: Object.entries(TASKS).filter(([, t]) => !t.hidden).map(([k, t]) => ({ key: k, label: t.label, model: modelKeyFor(k), def: t.def, claudeOnly: CLAUDE_ONLY.includes(k), session: SESSION_MODEL[k] || null,
+          saved: (() => { const pk = DOC.settings.models && DOC.settings.models[k]; return usable(pk, k) ? pk : t.def; })() })),
+        providers: Object.entries(PROVIDERS).map(([k, v]) => ({ key: k, label: v.label, hasKey: hasKey(k) })),
       };
     },
+    // Drafting screens: a model for this task for the rest of this visit (null = back to Settings).
+    sessionModel(task) { return modelKeyFor(task); },
+    setSessionModel(task, key) {
+      if (key && !usable(key, task)) return;
+      if (key) SESSION_MODEL[task] = key; else delete SESSION_MODEL[task];
+      window.dispatchEvent(new CustomEvent('lu:model-changed', { detail: { task } }));
+    },
     setTaskModel(task, key) {
-      if (!TASKS[task] || !MODELS[key]) return;
+      if (!TASKS[task] || !usable(key, task)) return;
       DOC.settings.models = Object.assign({}, DOC.settings.models || {}, { [task]: key });
       markDirty();
     },

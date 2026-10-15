@@ -398,14 +398,18 @@ const GUIDE_CHAPTERS = [
       <GShot src="settings-appearance.jpg" caption="Settings → Appearance." width={720}/>
       <GH>Claude API key</GH>
       <GP>Level Up uses Claude to read emails and jobs and to research companies. Create a key at <B>console.anthropic.com → API keys</B>, paste it into <B>Settings → Claude API key</B>, click <B>Save key</B>, then <B>Test connection</B>. It's stored in your own Drive file and used only from your browser.</GP>
-      <GH>Claude models & usage (cost)</GH>
-      <GShot src="settings-claude-usage.jpg" caption="Settings → Claude models & usage: this month's spend and a model per job." width={720}/>
+      <GH>Other AI providers (optional)</GH>
+      <GP>Besides Claude, Level Up can use <B>OpenAI</B> (GPT-6 Astra, the flagship; GPT-6 Luna, fast and cheap) and <B>Google Gemini</B> (Gemini 4 Argon, the flagship; Gemini 3.8 Flash, fast). In <B>Settings → Other AI providers</B>, paste a key (get one at platform.openai.com or aistudio.google.com), click <B>Save key</B>, then <B>Test connection</B>. Their models then appear wherever you choose a model. Remove a key and those jobs go back to Claude.</GP>
+      <GTip>Level Up's instructions were written and tested with Claude. Other models may follow rules like “never invent facts” less reliably: read their drafts with that in mind. Company profiles (web search) and resume import (reading PDFs) always use Claude.</GTip>
+      <GH>AI models & usage (cost)</GH>
+      <GShot src="settings-claude-usage.jpg" caption="Settings → AI models & usage: this month's spend and a default model per job." width={720}/>
       <GList items={[
-        <><B>Pick a model per job</B>: Gmail emails, LinkedIn jobs, company profiles, resumes, duplicate checks. <B>Haiku</B> is about 20× cheaper than <B>Sonnet</B>; <B>Opus</B> is the most capable and costs twice Sonnet.</>,
+        <><B>Pick a default model per job</B>: Gmail emails, LinkedIn jobs, company profiles, resumes, Brand posts, networking messages and more. <B>Claude Haiku</B> is about 20× cheaper than <B>Sonnet</B>; <B>Opus</B> is the most capable and costs twice Sonnet. OpenAI and Gemini models are listed under their own headings once you've added their key.</>,
+        <><B>Switch for one visit</B>: Brand, Outreach, an opportunity's Outreach tab, Resume and Cover letter each have a <B>Model</B> picker. Your choice lasts until you reload Level Up; buttons show which model is working (“Draft with GPT-6 Luna”).</>,
         <>Each option shows a rough cost per item, based on your real usage once there is some.</>,
         <><B>Try before you commit</B>: switch one job to Haiku, check the next few results (e.g. a LinkedIn job's fit and hiring manager), and switch back if they're not good enough.</>,
         <>The cards show this month's spend, last month, and what <B>caching</B> saved. Caching re-uses Level Up's instructions within 5 minutes, so it pays off in batches (a Gmail sync, a LinkedIn page, a resume import).</>,
-        <>For a hard ceiling, set a monthly limit at <B>console.anthropic.com → Settings → Limits</B>.</>,
+        <>When you use more than one provider, the note under the list shows this month's spend by provider. For a hard ceiling, set a monthly limit with each provider: <B>console.anthropic.com → Settings → Limits</B>, OpenAI's and Google AI Studio's billing settings.</>,
       ]}/>
       <GH>Google</GH>
       <GShot src="settings-google.jpg" caption="Settings → Google: sync, open the data file, back up and restore." width={720}/>
@@ -442,6 +446,7 @@ const GUIDE_CHAPTERS = [
         ["Claude costs more than expected", <>Open <B>Settings → Claude models & usage</B> to see which job spends the most, then switch it to <B>Haiku</B>. Company profiles also pay 1¢ per web search.</>],
         ["An opportunity is missing from the Pipeline list", <>A filter or search is probably hiding it: the list says how many are shown. Click <B>Clear filters</B>.</>],
         ["Google says “Access blocked: Authorization Error” (Error 400)", <>You opened Level Up's file from the folder. Google only allows sign-in from the web address: open <B>dhruvc0110.github.io/level-up</B> in Chrome (bookmark it, or install it as an app).</>],
+        ["“OpenAI didn't answer”", <>OpenAI hides key problems from browsers, so a wrong key or an account with no credit looks like a network failure. Check the key and billing at platform.openai.com, then <B>Replace</B> it in Settings → Other AI providers and click <B>Test connection</B>.</>],
         ["I see an old version after an update", <>Press <K>Cmd</K> + <K>Shift</K> + <K>R</K> once.</>],
       ].map(([q, a], i) => (
         <div key={i} style={{ padding: '12px 0', borderTop: i ? '1px solid var(--line-1)' : 'none' }}>
@@ -456,6 +461,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['15 Oct 2026', [
+          'Other AI models: add an OpenAI key (GPT-6 Astra, GPT-6 Luna) or a Google key (Gemini 4 Argon, Gemini 3.8 Flash) in Settings → Other AI providers. Pick a default per job in Settings → AI models & usage, or switch model for one visit with the Model picker on Brand, Outreach, Resume and Cover letter.',
           'New: Outreach in the sidebar, for networking not tied to an opportunity. People are grouped (Reconnect, Search partners, Target peers, New people); add someone from their LinkedIn link and profile text; pick a purpose and channel and work on the message with Claude in a chat beside the draft.',
         ]],
         ['14 Oct 2026', [
