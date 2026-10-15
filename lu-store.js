@@ -59,6 +59,7 @@
     outreach: { label: 'Outreach notes',              def: 'sonnet', typical: { in: 6000,  out: 900 } },
     documents: { label: 'Resumes and cover letters',  def: 'sonnet', typical: { in: 12000, out: 3500 } },
     brand:    { label: 'Brand posts and ideas',       def: 'sonnet', typical: { in: 5000,  out: 1200 } },
+    networking: { label: 'Networking messages',       def: 'sonnet', typical: { in: 4500,  out: 700 } },
     test:     { label: 'Key tests',                   def: 'haiku',  hidden: true, typical: { in: 20, out: 5 } },
   };
   function modelKeyFor(task) {

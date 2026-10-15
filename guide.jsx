@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '14 Oct 2026';
+const GUIDE_UPDATED = '15 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -266,6 +266,20 @@ const GUIDE_CHAPTERS = [
     </>,
   },
   {
+    id: 'outreach-network', title: 'Outreach: networking', blurb: 'Build and extend your network before a role exists',
+    body: () => <>
+      <GP><B>Outreach</B> in the sidebar is for networking that isn't tied to an opportunity yet: reconnecting, meeting search partners and getting to know peers. (Notes about a specific job stay in that opportunity's <B>Outreach</B> tab.)</GP>
+      <GShot src="outreach-network.jpg" caption="Outreach: people grouped on the left; the chat with Claude and the current draft on the right."/>
+      <GSteps items={[
+        <><B>Find who to reach.</B> People are grouped: <B>Reconnect</B> (strong or warm contacts with no touch in six months), <B>Search partners</B> (recruiters and executive search firms), <B>Target peers</B> (people at companies in your pipeline), <B>New people</B> (added here) and <B>Everyone</B>. Search by name, title or company. You can change anyone's group.</>,
+        <><B>Add a person.</B> Click <B>Add a person</B>, paste their LinkedIn link, and either paste the text of their profile page (Claude reads their role, company and what you have in common; about 1¢) or type the basics. Add how you know them. Level Up can't open LinkedIn pages itself, so the pasted text is how it learns about them.</>,
+        <><B>Start a message.</B> Pick the purpose (Reconnect, Congratulate, Share an insight, Ask for advice, Offer help, Introduce myself, Intro request via a contact, Follow-up) and the channel (LinkedIn connection note under 300 characters, LinkedIn message or email), then <B>Draft with Claude</B> (about 1–2¢ per turn). For an intro request, choose who you want to be introduced to; Claude also writes a forwardable blurb.</>,
+        <><B>Work on it in the chat.</B> Tell Claude what to change or ask its view; it explains and updates the draft beside the chat. Quick buttons add a persona lens or ask for Shorter, Warmer or More direct. Every change is a version: open an older one and click <B>Use this version</B> to go back. You can also edit the draft directly.</>,
+        <><B>Send it yourself.</B> <B>Copy</B>, send it on LinkedIn or by email, then <B>Mark sent</B>. It's listed under <B>Sent</B> for that person, and they leave Reconnect. A follow-up is just the Follow-up purpose, whenever you choose.</>,
+      ]}/>
+    </>,
+  },
+  {
     id: 'network', title: 'Network & connections', blurb: 'Your contacts, warm paths and LinkedIn connections',
     body: () => <>
       <GP>The Network holds your contacts from <B>Google Contacts</B>, with <B>last touch</B> dates from your <B>Calendar</B>, plus anyone you add by hand or import from LinkedIn.</GP>
@@ -441,6 +455,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['15 Oct 2026', [
+          'New: Outreach in the sidebar, for networking not tied to an opportunity. People are grouped (Reconnect, Search partners, Target peers, New people); add someone from their LinkedIn link and profile text; pick a purpose and channel and work on the message with Claude in a chat beside the draft.',
+        ]],
         ['14 Oct 2026', [
           'Opening Level Up\u2019s file straight from the folder now shows a short message with a button to the web address, instead of Google\u2019s “Access blocked” error.',
         ]],

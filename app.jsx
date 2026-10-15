@@ -202,6 +202,10 @@ function App() {
           <NetworkView contacts={window.LU_CONTACTS} opportunities={opportunities}
             onOpenOpp={(id) => pushNav({ view: 'pipeline', openOppId: id })}/>
         )}
+        {view === 'outreach' && (
+          typeof NetworkingView === 'function' ? <NetworkingView/>
+            : <div style={{ padding: 40, color: 'var(--ink-2)' }}>Outreach didn't load. Refresh the page (Cmd+Shift+R).</div>
+        )}
         {view === 'brand' && (
           <BrandView posts={window.LU_POSTS}/>
         )}
@@ -339,6 +343,8 @@ function Sidebar({ view, onView, onAdd, personaChip, personas }) {
           active={view === 'career'} onClick={() => onView('career')}/>
         <NavItem icon="network" label="Network"
           active={view === 'network'} onClick={() => onView('network')}/>
+        <NavItem icon="send" label="Outreach"
+          active={view === 'outreach'} onClick={() => onView('outreach')}/>
         <NavItem icon="brand" label="Brand"
           active={view === 'brand'} onClick={() => onView('brand')}/>
         <div style={{ height: 1, background: 'var(--line-1)', margin: '8px 10px' }}/>
