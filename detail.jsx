@@ -68,10 +68,14 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete, inline, tab, onTab, lis
             hasDrafts={(opp.drafts || []).some((d) => d.type === type)}
           />
         </>) : (
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Model for resumes and cover letters, visible before and after drafting */}
+            <div style={{ padding: '8px 22px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto' }}><ModelPicker task="documents"/></div>
+            <div style={{ flex: 1, minHeight: 0 }}>
             {typeof ResumeWorkspace === 'function'
               ? (docTab === 'resume' ? <ResumeWorkspace opp={opp} onUpdate={onUpdate}/> : <LetterWorkspace opp={opp} onUpdate={onUpdate}/>)
               : <div style={{ padding: 28, color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load documents.</div>}
+            </div>
           </div>
         )}
         <style>{`
@@ -368,7 +372,7 @@ function DetailDrafts({ opp, onUpdate, generating, error }) {
         marginBottom: 14,
       }}>
         <div>
-          <span className="eyebrow">Outreach drafts</span> <ModelPicker task="outreach" compact/>
+          <span className="eyebrow">Outreach drafts</span> <span style={{ marginLeft: 10 }}><ModelPicker task="outreach"/></span>
         </div>
         <span className="mono" style={{ fontSize: 10.5, color: 'var(--ink-4)' }}>
           {drafts.length} {drafts.length === 1 ? 'DRAFT' : 'DRAFTS'}

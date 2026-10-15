@@ -150,14 +150,19 @@ function ClaudeUsagePanel() {
   const prev = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7); })();
   const sum = (m, k) => Object.values(m || {}).reduce((s, t) => s + (t[k] || 0), 0);
   const cur = usage[month] || {};
-  const choose = (task, key) => { LU_API.setTaskModel(task, key); setTick((n) => n + 1); };
+  const [savedRow, setSavedRow] = React.useState(null);
+  const choose = (task, key) => {
+    LU_API.setTaskModel(task, key);
+    setSavedRow(task); setTick((n) => n + 1);
+    setTimeout(() => setSavedRow((r) => (r === task ? null : r)), 2500);
+  };
   const monthName = (ym) => new Date(ym + '-15').toLocaleString(undefined, { month: 'long' });
   const note = { fontSize: 12, color: 'var(--ink-3)' };
 
   return (
     <SettingsPanel title="AI models & usage" eyebrow="AI · COST">
       <p style={{ color: 'var(--ink-2)', fontSize: 14, lineHeight: 1.6, margin: '0 0 16px' }}>
-        Choose which model does each job by default. Drafting screens (Brand, Outreach, Resume, Cover letter) also let you switch model for one visit. Cheaper models cost far less; try one, check its results, and switch back if they're not good enough. OpenAI and Gemini models appear once their key is added above; company profiles and resume import need Claude. The cost next to each model is a rough figure for one item.
+        Choose which model does each job by default; a change is saved straight away (you'll see ✓ Saved as default). Drafting screens (Brand, Outreach, Resume, Cover letter) also let you switch model for one visit. Cheaper models cost far less; try one, check its results, and switch back if they're not good enough. OpenAI and Gemini models appear once their key is added above; company profiles and resume import need Claude. The cost next to each model is a rough figure for one item.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18 }}>
@@ -185,7 +190,9 @@ function ClaudeUsagePanel() {
                 <div style={{ fontSize: 13.5, color: 'var(--ink-1)' }}>{t.label}</div>
                 <div style={note}>{u ? `${u.calls} call${u.calls === 1 ? '' : 's'} · ${fmtUsd(u.cost)} this month` : 'Not used yet this month'}</div>
               </div>
-              <select aria-label={'Model for ' + t.label} value={t.model} onChange={(e) => choose(t.key, e.target.value)}
+              {savedRow === t.key && <span style={{ fontSize: 12, color: 'oklch(62% 0.12 150)' }}>✓ Saved as default</span>}
+              {t.session && t.session !== t.saved && savedRow !== t.key && <span style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>this visit: {(models.find((m) => m.key === t.session) || {}).label}</span>}
+              <select aria-label={'Model for ' + t.label} value={t.saved} onChange={(e) => choose(t.key, e.target.value)}
                 style={{ flex: '0 1 250px', maxWidth: '100%', fontSize: 13, background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '5px 6px' }}>
                 {['anthropic', 'openai', 'google'].filter((pv) => !(t.claudeOnly && pv !== 'anthropic')).map((pv) => {
                   const ms = models.filter((m) => m.provider === pv);

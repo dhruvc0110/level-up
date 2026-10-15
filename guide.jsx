@@ -405,7 +405,8 @@ const GUIDE_CHAPTERS = [
       <GShot src="settings-claude-usage.jpg" caption="Settings → AI models & usage: this month's spend and a default model per job." width={720}/>
       <GList items={[
         <><B>Pick a default model per job</B>: Gmail emails, LinkedIn jobs, company profiles, resumes, Brand posts, networking messages and more. <B>Claude Haiku</B> is about 20× cheaper than <B>Sonnet</B>; <B>Opus</B> is the most capable and costs twice Sonnet. OpenAI and Gemini models are listed under their own headings once you've added their key.</>,
-        <><B>Switch for one visit</B>: Brand, Outreach, an opportunity's Outreach tab, Resume and Cover letter each have a <B>Model</B> picker. Your choice lasts until you reload Level Up; buttons show which model is working (“Draft with GPT-6 Luna”).</>,
+        <><B>Pick and save a default</B>: each job's list saves as soon as you choose (✓ Saved as default). If a drafting screen is using a different model for this visit, the row says so.</>,
+        <><B>Switch for one visit</B>: Brand, Outreach, an opportunity's Outreach tab, and the top of the Resume and Cover letter tabs each have a <B>Model</B> picker. Your choice lasts until you reload Level Up; buttons show which model is working (“Draft with GPT-6 Luna”). Click <B>Make default</B> next to the picker to keep that model for this job from now on.</>,
         <>Each option shows a rough cost per item, based on your real usage once there is some.</>,
         <><B>Try before you commit</B>: switch one job to Haiku, check the next few results (e.g. a LinkedIn job's fit and hiring manager), and switch back if they're not good enough.</>,
         <>The cards show this month's spend, last month, and what <B>caching</B> saved. Caching re-uses Level Up's instructions within 5 minutes, so it pays off in batches (a Gmail sync, a LinkedIn page, a resume import).</>,
@@ -461,6 +462,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['15 Oct 2026', [
+          'Model picker: now at the top of the Resume and Cover letter tabs (before and after drafting), with Make default to save your choice. Settings → AI models & usage shows the saved default for each job and confirms each change.',
           'Other AI models: add an OpenAI key (GPT-6 Astra, GPT-6 Luna) or a Google key (Gemini 4 Argon, Gemini 3.8 Flash) in Settings → Other AI providers. Pick a default per job in Settings → AI models & usage, or switch model for one visit with the Model picker on Brand, Outreach, Resume and Cover letter.',
           'New: Outreach in the sidebar, for networking not tied to an opportunity. People are grouped (Reconnect, Search partners, Target peers, New people); add someone from their LinkedIn link and profile text; pick a purpose and channel and work on the message with Claude in a chat beside the draft.',
         ]],

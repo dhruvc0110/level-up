@@ -481,7 +481,6 @@ function ResumeWorkspace({ opp, onUpdate }) {
           <select aria-label="Target length" value={pages} onChange={(e) => setPages(+e.target.value)} style={docSel}><option value={2}>2 pages</option><option value={1}>1 page</option></select>
           <Btn variant="primary" size="m" icon="sparkles" disabled={!!busy || !(c.achievements || []).length} onClick={tailor}>{busy ? 'Tailoring…' : 'Tailor with ' + aiName('documents')}</Btn>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>about 3–5¢ with Claude Sonnet</span>
-          <ModelPicker task="documents" compact/>
         </div>
         {!(c.achievements || []).length && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>Your Career profile is empty: add your resumes there first.</div>}
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 10 }}>{busy}</div>}
@@ -651,7 +650,6 @@ function ResumeWorkspace({ opp, onUpdate }) {
       <div style={{ overflow: 'auto', padding: '18px 22px 30px', background: 'var(--bg-0)' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
           <Btn variant="primary" size="m" icon="arrow-right" disabled={!!busy} onClick={create}>{busy && busy.startsWith('Building') ? 'Creating…' : 'Create Google Doc'}</Btn>
-          <ModelPicker task="documents"/>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Saved to Level Up / Documents in your Drive. Edit it there, or download as Word or PDF.</span>
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}
@@ -748,7 +746,6 @@ function LetterWorkspace({ opp, onUpdate }) {
       <div style={{ overflow: 'auto', padding: '18px 22px 30px', background: 'var(--bg-0)' }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
           <Btn variant="primary" size="m" icon="arrow-right" disabled={!!busy} onClick={create}>{busy && busy.startsWith('Building') ? 'Creating…' : 'Create Google Doc'}</Btn>
-          <ModelPicker task="documents"/>
           <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Saved to Level Up / Documents in your Drive.</span>
         </div>
         {busy && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 8 }}>{busy}</div>}

@@ -624,14 +624,27 @@ function ModelPicker({ task, compact }) {
   if (!t) return null;
   const options = models.filter((m) => m.hasKey && !(t.claudeOnly && m.provider !== 'anthropic'));
   const current = LU_API.sessionModel(task);
+  const makeDefault = () => {
+    LU_API.setTaskModel(task, current);
+    LU_API.setSessionModel(task, null);
+    if (window.LU_CORE) window.LU_CORE.pill(`Saved: ${(models.find((m) => m.key === current) || {}).label} is now the default for ${t.label.toLowerCase()}`);
+  };
   return (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--sans)' }} title="Which AI model drafts here. Settings sets the default.">
-      {!compact && 'Model'}
-      <select aria-label="AI model" value={current} onChange={(e) => LU_API.setSessionModel(task, e.target.value === t.saved ? null : e.target.value)}
-        style={{ background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '3px 6px', fontSize: 12, fontFamily: 'var(--sans)' }}>
-        {options.map((m) => <option key={m.key} value={m.key}>{m.label}{m.key === t.saved ? ' (default)' : ''}</option>)}
-      </select>
-    </label>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-3)', fontFamily: 'var(--sans)' }}>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Which AI model drafts here. Settings sets the default.">
+        Model
+        <select aria-label="AI model" value={current} onChange={(e) => LU_API.setSessionModel(task, e.target.value === t.saved ? null : e.target.value)}
+          style={{ background: 'var(--bg-2)', color: 'var(--ink-1)', border: '1px solid var(--line-2)', borderRadius: 3, padding: '3px 6px', fontSize: 12, fontFamily: 'var(--sans)' }}>
+          {options.map((m) => <option key={m.key} value={m.key}>{m.label}{m.key === t.saved ? ' (default)' : ''}</option>)}
+        </select>
+      </label>
+      {current !== t.saved && (
+        <button onClick={makeDefault} title="Use this model by default here from now on (Settings → AI models & usage)"
+          style={{ appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--ink-2)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3, fontFamily: 'var(--sans)' }}>
+          Make default
+        </button>
+      )}
+    </span>
   );
 }
 
