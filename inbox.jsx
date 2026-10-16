@@ -71,6 +71,8 @@ function InboxView({ onOpenOpp, onNavSettings }) {
             </div>
           )}
 
+          <LinkedInSyncReport onOpenOpp={onOpenOpp} onChanged={load}/>
+
           {items.length === 0 && !error && (
             <EmptyState onSync={sync} syncing={syncing}/>
           )}
@@ -456,6 +458,43 @@ function EmptyState({ onSync, syncing }) {
       <Btn variant="ghost" onClick={onSync} disabled={syncing} icon="spark">
         {syncing ? 'Syncing…' : 'Sync Gmail now'}
       </Btn>
+    </div>
+  );
+}
+
+// After a LinkedIn sync: which saved jobs Level Up already had, and where they are.
+function LinkedInSyncReport({ onOpenOpp, onChanged }) {
+  const [, bump] = React.useReducer((x) => x + 1, 0);
+  const d = window.LU_CORE && window.LU_CORE.doc();
+  const r = d && d.linkedinLastSync;
+  if (!r || r.dismissed || !(r.already || []).length || Date.now() - new Date(r.at).getTime() > 7 * 864e5) return null;
+  const stageLabel = (id) => ((window.LU_STAGES || []).find((s) => s.id === id) || {}).label || id;
+  const day = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const restore = async (a) => {
+    await LU_API.post('/api/inbox/' + a.id + '/restore', {});
+    a.status = 'pending'; window.LU_CORE.markDirty(); bump(); onChanged && onChanged();
+  };
+  const link = { appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--ink-1)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3, fontFamily: 'var(--sans)' };
+  return (
+    <div style={{ border: '1px solid var(--line-2)', background: 'var(--bg-2)', borderRadius: 4, padding: '12px 16px', marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+        <span style={{ fontSize: 13.5, color: 'var(--ink-1)' }}>
+          LinkedIn sync, {day(r.at)}: {r.added ? `${r.added} new · ` : ''}{r.already.length} you saved {r.already.length === 1 ? 'was' : 'were'} already in Level Up
+        </span>
+        <button style={{ ...link, color: 'var(--ink-3)', fontSize: 12 }} onClick={() => { r.dismissed = true; window.LU_CORE.markDirty(); bump(); }}>Dismiss</button>
+      </div>
+      {r.already.map((a) => (
+        <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 12.5, color: 'var(--ink-2)', padding: '5px 0', borderTop: '1px solid var(--line-1)', marginTop: 5 }}>
+          <span style={{ color: 'var(--ink-1)' }}>{[a.company, a.role].filter(Boolean).join(' · ')}</span>
+          {a.oppId
+            ? <><span>in your Pipeline ({stageLabel(a.stage)})</span><button style={link} onClick={() => onOpenOpp && onOpenOpp(a.oppId)}>Open</button></>
+            : a.status === 'rejected'
+              ? <><span>you rejected it{a.triagedAt ? ' on ' + day(a.triagedAt) : ''}</span><button style={link} onClick={() => restore(a)}>Bring back to Inbox</button></>
+              : a.status === 'accepted'
+                ? <span>accepted earlier (opportunity since archived)</span>
+                : <span>still in your Inbox below</span>}
+        </div>
+      ))}
     </div>
   );
 }

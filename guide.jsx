@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '15 Oct 2026';
+const GUIDE_UPDATED = '16 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -439,6 +439,7 @@ const GUIDE_CHAPTERS = [
         ["I ran the LinkedIn button but nothing showed up", <>Watch the corner counter. Jobs land one at a time (10–15 seconds each). If the LinkedIn box said <B>Read 0 job pages</B>, the tab wasn't in front; click the bookmark again and keep it visible.</>],
         ["“Hiring manager not read yet”", <>Only the Saved-list card came through. Open the job on LinkedIn, scroll down, click the bookmark there.</>],
         ["“Couldn't read this job's page details”", <>Claude was briefly unavailable. Same fix: click the bookmark on that job's page.</>],
+        ["A job I saved on LinkedIn didn't appear", <>Level Up never imports the same job twice. After a sync, the Inbox shows <B>LinkedIn sync: … already in Level Up</B>, naming each one and where it is: in your Pipeline (click <B>Open</B>), still in the Inbox, or rejected earlier (click <B>Bring back to Inbox</B>).</>],
         ["Some saved jobs are missing", <>LinkedIn shows 10 per page. Go to the next page of Saved and click the bookmark again.</>],
         ["The company profile looks wrong", <>Click <B>Refresh</B> on the profile. If it's a recruiter posting, it's skipped on purpose.</>],
         ["A job came from email, not LinkedIn", <>Rows with an email address come from Gmail (the LevelUp label). Reject them if they're not relevant.</>],
@@ -461,6 +462,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['16 Oct 2026', [
+          'LinkedIn sync now names the saved jobs Level Up already had, and where they are (Pipeline, Inbox, or rejected with a Bring back button), instead of only counting them.',
+        ]],
         ['15 Oct 2026', [
           'Model picker: now at the top of the Resume and Cover letter tabs (before and after drafting), with Make default to save your choice. Settings → AI models & usage shows the saved default for each job and confirms each change.',
           'Other AI models: add an OpenAI key (GPT-6 Astra, GPT-6 Luna) or a Google key (Gemini 4 Argon, Gemini 3.8 Flash) in Settings → Other AI providers. Pick a default per job in Settings → AI models & usage, or switch model for one visit with the Model picker on Brand, Outreach, Resume and Cover letter.',

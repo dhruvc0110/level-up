@@ -876,6 +876,7 @@ company_size and industry come from what you know about the company; use null if
   async function importLinkedInJobs(jobs) {
     let added = 0, enriched = 0, skipped = 0, n = 0;
     const errors = [];
+    const already = []; // jobs Level Up has seen before, named in the sync report
     const list = (jobs || []).slice(0, 100);
     let pos = 0;
     // Show each job in the Inbox as soon as it's saved, with a running count.
@@ -889,6 +890,9 @@ company_size and industry come from what you know about the company; use null if
       const detail = j.detail && j.detail.text ? Object.assign({}, j.detail, { id: jobId }) : null;
       const existing = DOC.triage.find((t) => t.id === id);
       if (existing) {
+        const opp = existing.opportunityId ? DOC.opportunities.find((o) => o.id === existing.opportunityId) : null;
+        already.push({ id, role: (existing.parsed && existing.parsed.role) || existing.subject || 'Saved job', company: (existing.parsed && existing.parsed.company) || '',
+          status: existing.triageStatus, oppId: opp ? opp.id : null, stage: opp ? opp.stage : null, triagedAt: existing.triagedAt || null });
         // Already here: only worth touching if we now have its full page.
         if (detail && (!existing.enrichment || existing.enrichment.partial)) {
           pill(`LinkedIn: reading job ${pos} of ${list.length}…`, 'sticky'); n++;
@@ -935,7 +939,7 @@ company_size and industry come from what you know about the company; use null if
       await flush(); // save after every job, so an interruption loses nothing
     }
     await flush();
-    return { added, enriched, skipped, errors };
+    return { added, enriched, skipped, errors, already };
   }
 
   // ── Enrich one job from its full LinkedIn page ──────────────────────────
@@ -1079,9 +1083,13 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
   }
   async function handleSavedList(jobs) {
     const r = await importLinkedInJobs(jobs);
+    // Remembered so the Inbox can say which saved jobs were already here, and where.
+    DOC.linkedinLastSync = { at: nowIso(), added: r.added, enriched: r.enriched, already: r.already || [], dismissed: false };
+    markDirty();
+    const where = (r.already || []).map((a) => a.company || a.role).slice(0, 2).join(', ');
     pill((r.added || r.enriched)
-      ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here`].filter(Boolean).join(' · ')
-      : `No new jobs · ${r.skipped} already in Level Up`);
+      ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here${where ? ' (' + where + (r.already.length > 2 ? '…' : '') + ')' : ''}: see Inbox`].filter(Boolean).join(' · ')
+      : `No new jobs · ${r.skipped} already in Level Up${where ? ' (' + where + (r.already.length > 2 ? '…' : '') + ')' : ''}: see Inbox`);
     window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
   }
   // Works through the queue one payload at a time, oldest first.
@@ -1455,6 +1463,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       const row = DOC.triage.find((t) => t.id === seg[1]);
       if (!row) throw new Error('Triage item not found');
       if (seg[2] === 'reject') { row.triageStatus = 'rejected'; row.triagedAt = nowIso(); markDirty(); return { rejected: row.id }; }
+      if (seg[2] === 'restore') { row.triageStatus = 'pending'; row.triagedAt = null; markDirty(); return { restored: row.id }; }
       if (seg[2] === 'accept') {
         const b = body || {};
         const opp = {
