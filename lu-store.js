@@ -826,6 +826,7 @@ If is_opportunity is false, set all other fields to null except reasoning.`;
       } catch (e) {
         row.parseStatus = 'failed';
         row.errorMessage = String(e.message || e).slice(0, 500);
+        row.needsClaude = { at: nowIso(), error: plainClaudeError(e) };
         errors.push(`${ref.id.slice(0, 12)}…: ${row.errorMessage}`);
       }
       markDirty();
@@ -874,7 +875,7 @@ company_size and industry come from what you know about the company; use null if
   }
 
   async function importLinkedInJobs(jobs) {
-    let added = 0, enriched = 0, skipped = 0, n = 0;
+    let added = 0, enriched = 0, skipped = 0, n = 0, finished = 0;
     const errors = [];
     const already = []; // jobs Level Up has seen before, named in the sync report
     const list = (jobs || []).slice(0, 100);
@@ -889,6 +890,13 @@ company_size and industry come from what you know about the company; use null if
       const id = 'li-' + jobId;
       const detail = j.detail && j.detail.text ? Object.assign({}, j.detail, { id: jobId }) : null;
       const existing = DOC.triage.find((t) => t.id === id);
+      if (existing && unfinished(existing)) {
+        // A job that never finished (Claude was unavailable): finish it now.
+        if (detail) existing.pendingDetail = slimDetail(detail);
+        pill(`LinkedIn: finishing job ${pos} of ${list.length}…`, 'sticky'); n++;
+        try { await finishRow(existing); finished++; } catch (e) { errors.push(plainClaudeError(e)); }
+        continue;
+      }
       if (existing) {
         const opp = existing.opportunityId ? DOC.opportunities.find((o) => o.id === existing.opportunityId) : null;
         already.push({ id, role: (existing.parsed && existing.parsed.role) || existing.subject || 'Saved job', company: (existing.parsed && existing.parsed.company) || '',
@@ -904,7 +912,7 @@ company_size and industry come from what you know about the company; use null if
       pill(`LinkedIn: reading job ${pos} of ${list.length}…`, 'sticky'); n++;
       if (detail) {
         try { await enrichLinkedInJob(detail); added++; enriched++; continue; }
-        catch (e) { var detailError = String(e.message || e).slice(0, 200); errors.push(detailError); /* fall back to the card */ }
+        catch (e) { var detailError = String(e.message || e).slice(0, 200); var keepDetail = slimDetail(detail); errors.push(detailError); /* fall back to the card */ }
       }
       const text = String(j.text || '').slice(0, 1500);
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -915,12 +923,14 @@ company_size and industry come from what you know about the company; use null if
         receivedAt: nowIso(), parsed: null, parseStatus: 'pending', triageStatus: 'pending',
         opportunityId: null, errorMessage: null, createdAt: nowIso(), parsedAt: null, triagedAt: null,
       };
-      if (typeof detailError === 'string') { row.enrichError = detailError; detailError = undefined; }
+      if (typeof detailError === 'string') { row.enrichError = detailError; row.pendingDetail = keepDetail; detailError = undefined; keepDetail = undefined; }
       DOC.triage.unshift(row);
       added++;
       try {
         const resp = await claude(modelFor('linkedin'), LINKEDIN_SYSTEM_PROMPT(), `${text}\n\nLink: ${jobUrl}`, 1200, null, 'linkedin');
-        row.parsed = extractJson(replyText(resp) || '{}');
+        const got = extractJson(replyText(resp) || '{}');
+        if (!got || (!got.company && !got.role)) throw new Error('Claude returned no details for this job');
+        row.parsed = got;
         const d = row.parsed;
         // Card-only: what Claude can add without the job page. Marked partial.
         row.enrichment = {
@@ -930,7 +940,8 @@ company_size and industry come from what you know about the company; use null if
         };
       } catch (e) {
         const g = guessFromCard(lines);
-        row.parsed = { is_opportunity: true, confidence: 1, reasoning: 'Claude unavailable (' + String(e.message || e).slice(0, 120) + ') — filled from the card text.', ...g, contact: null, persona: null, fit: null, next_action: null };
+        row.parsed = { is_opportunity: true, confidence: 1, guessed: true, reasoning: 'Claude unavailable (' + String(e.message || e).slice(0, 120) + ') — filled from the card text.', ...g, contact: null, persona: null, fit: null, next_action: null };
+        row.needsClaude = { at: nowIso(), error: plainClaudeError(e) };
         errors.push(String(e.message || e).slice(0, 200));
       }
       row.parseStatus = row.parsed.is_opportunity ? 'parsed' : 'not_opportunity';
@@ -939,7 +950,79 @@ company_size and industry come from what you know about the company; use null if
       await flush(); // save after every job, so an interruption loses nothing
     }
     await flush();
-    return { added, enriched, skipped, errors, already };
+    return { added, enriched, skipped, errors, already, finished };
+  }
+
+  // ── Jobs and emails Claude couldn't finish (usage limit, outage) ─────────
+  // The raw text is kept on the Inbox row, so they can be finished later
+  // without going back to LinkedIn or Gmail.
+  function plainClaudeError(e) {
+    const m = String((e && e.message) || e || '');
+    if (/credit balance|usage limit|spend limit|billing|quota|insufficient/i.test(m)) return 'Claude\'s usage limit was reached';
+    if (/rate.?limit|429|overloaded|529|busy/i.test(m)) return 'Claude was busy';
+    if (/reach|network|fetch/i.test(m)) return 'Level Up couldn\'t reach Claude';
+    return m.slice(0, 160) || 'Claude was unavailable';
+  }
+  function slimDetail(d) {
+    if (!d) return null;
+    return { id: d.id, text: String(d.text || '').slice(0, 9000), companyUrl: d.companyUrl || null,
+      people: (Array.isArray(d.people) ? d.people : []).slice(0, 15).map((p) => ({ url: p.url, text: String(p.text || '').slice(0, 200) })) };
+  }
+  function unfinished(row) {
+    return !!(row.needsClaude || (row.parsed && row.parsed.guessed) || row.parseStatus === 'failed' || (row.pendingDetail && row.enrichError));
+  }
+  async function finishRow(row) {
+    if (row.kind === 'linkedin') {
+      if (row.pendingDetail && row.pendingDetail.text) {
+        await enrichLinkedInJob(row.pendingDetail);
+        delete row.pendingDetail;
+      } else {
+        const jobUrl = row.jobUrl;
+        const resp = await claude(modelFor('linkedin'), LINKEDIN_SYSTEM_PROMPT(), `${String(row.bodyText || '').slice(0, 1500)}\n\nLink: ${jobUrl}`, 1200, null, 'linkedin');
+        const d = extractJson(replyText(resp) || '{}');
+        if (!d || (!d.company && !d.role)) throw new Error('Claude returned no details for this job');
+        row.parsed = d;
+        row.enrichment = Object.assign({}, row.enrichment || {}, {
+          partial: true, location: d.location || null, workplace: d.workplace || null,
+          companySize: d.company_size || null, companySizeEstimated: true, industry: d.industry || null,
+          compensation: d.compensation || null, jobUrl, enrichedAt: nowIso(),
+        });
+        row.parseStatus = d.is_opportunity === false ? 'not_opportunity' : 'parsed';
+        if (row.parseStatus === 'parsed') row.parsed.is_opportunity = true;
+      }
+    } else {
+      const from = row.fromName ? `${row.fromName} <${row.fromAddress}>` : row.fromAddress;
+      row.parsed = await parseEmail(from, row.subject, row.bodyText || '');
+      if (row.parsed && row.parsed.is_opportunity === false && /did not parse/.test(row.parsed.reasoning || '')) throw new Error('Claude\'s reply could not be read');
+      row.parseStatus = row.parsed.is_opportunity ? 'parsed' : 'not_opportunity';
+      row.errorMessage = null;
+    }
+    if (row.parsed) delete row.parsed.guessed;
+    delete row.needsClaude; delete row.enrichError;
+    row.parsedAt = nowIso();
+    markDirty();
+    await flush();
+    return row;
+  }
+  // Quietly finishes what it can (on start-up and after a sync); stops at the first failure.
+  let finishing = null;
+  async function finishUnfinished(max, manual) {
+    if (finishing || PASSIVE || RELEASING || !DOC || !DOC.settings.anthropicApiKey) return finishing;
+    // Automatic tries stop after 3 per item (Finish now still works), so an unreadable item can't keep costing money.
+    const rows = DOC.triage.filter((t) => t.triageStatus === 'pending' && unfinished(t) && (manual || ((t.needsClaude && t.needsClaude.tries) || 0) < 3)).slice(0, max || 10);
+    if (!rows.length) return { done: 0, left: 0 };
+    finishing = (async () => {
+      let done = 0;
+      for (const row of rows) {
+        try { await finishRow(row); done++; window.dispatchEvent(new CustomEvent('lu:inbox-changed')); }
+        catch (e) { row.needsClaude = { at: nowIso(), error: plainClaudeError(e), tries: ((row.needsClaude && row.needsClaude.tries) || 0) + 1 }; markDirty(); break; }
+      }
+      const left = DOC.triage.filter((t) => t.triageStatus === 'pending' && unfinished(t)).length;
+      if (done) pill(`Finished ${done} saved item${done === 1 ? '' : 's'} Claude couldn't read earlier` + (left ? ` · ${left} still waiting` : ''));
+      window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
+      return { done, left };
+    })().finally(() => { finishing = null; });
+    return finishing;
   }
 
   // ── Enrich one job from its full LinkedIn page ──────────────────────────
@@ -1012,6 +1095,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     let d;
     try { d = answer(await ask()); }
     catch (e) { if (!(e instanceof SyntaxError)) throw e; d = answer(await ask()); } // unreadable reply: ask once more
+    // An empty answer is a failure, not a job with no details.
+    if (!d || (!d.company && !d.role)) throw new Error('Claude returned no details for this job');
     let hm = d.hiring_manager && d.hiring_manager.name ? d.hiring_manager : null;
     if (hm && !people.some((p) => p.url === String(hm.profile_url || '').split('?')[0])) hm = { ...hm, profile_url: null };
     const companyUrl = /^https:\/\/www\.linkedin\.com\/company\//.test(job.companyUrl || '') ? String(job.companyUrl).split('?')[0] : null;
@@ -1052,6 +1137,12 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       DOC.triage.unshift(row);
     } else {
       const p = row.parsed || (row.parsed = { is_opportunity: true });
+      if (p.guessed) {
+        // Filled from the card while Claude was unavailable: take the real reading.
+        Object.assign(p, { company: d.company || p.company, role: d.role || p.role, persona: d.persona || null, fit: d.fit || null,
+          next_action: d.next_action || null, confidence: 4, reasoning: 'Read from the full LinkedIn job page.' });
+        delete p.guessed;
+      }
       if (!p.company && d.company) p.company = d.company;
       if (!p.role && d.role) p.role = d.role;
       if (!p.contact && hmContact) p.contact = hmContact;
@@ -1059,7 +1150,7 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
       if (row.parseStatus !== 'parsed') { row.parseStatus = 'parsed'; p.is_opportunity = true; }
     }
     row.enrichment = enrichment;
-    delete row.enrichError;
+    delete row.enrichError; delete row.needsClaude; delete row.pendingDetail;
     row.parsedAt = nowIso();
 
     let opp = row.opportunityId ? DOC.opportunities.find((o) => o.id === row.opportunityId) : null;
@@ -1087,8 +1178,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
     DOC.linkedinLastSync = { at: nowIso(), added: r.added, enriched: r.enriched, already: r.already || [], dismissed: false };
     markDirty();
     const where = (r.already || []).map((a) => a.company || a.role).slice(0, 2).join(', ');
-    pill((r.added || r.enriched)
-      ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here${where ? ' (' + where + (r.already.length > 2 ? '…' : '') + ')' : ''}: see Inbox`].filter(Boolean).join(' · ')
+    pill((r.added || r.enriched || r.finished)
+      ? [r.added && `${r.added} new LinkedIn job${r.added === 1 ? '' : 's'}`, r.finished && `${r.finished} finished`, r.enriched && `${r.enriched} with full details`, r.skipped && `${r.skipped} already here${where ? ' (' + where + (r.already.length > 2 ? '…' : '') + ')' : ''}: see Inbox`].filter(Boolean).join(' · ')
       : `No new jobs · ${r.skipped} already in Level Up${where ? ' (' + where + (r.already.length > 2 ? '…' : '') + ')' : ''}: see Inbox`);
     window.dispatchEvent(new CustomEvent('lu:inbox-changed'));
   }
@@ -1115,6 +1206,8 @@ Rules: company_size comes from the page ("About the company"); if absent, give y
         }
       } finally { queueRunning = null; }
       if (did) researchMissing();
+      // Then anything left half-done by an earlier outage.
+      finishUnfinished(10);
     })();
     return queueRunning;
   }
@@ -1458,11 +1551,13 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
     if (p === 'inbox' && method === 'GET') {
       return DOC.triage.filter((t) => t.triageStatus === 'pending').map((t) => Object.assign({}, t));
     }
+    if (p === 'inbox/finish-all' && method === 'POST') { return (await finishUnfinished(25, true)) || { done: 0, left: 0 }; }
     if (p === 'inbox/sync' && method === 'POST') { const r = await syncInbox(); await flush(); researchMissing(); return r; }
     if (seg[0] === 'inbox' && seg.length === 3) {
       const row = DOC.triage.find((t) => t.id === seg[1]);
       if (!row) throw new Error('Triage item not found');
       if (seg[2] === 'reject') { row.triageStatus = 'rejected'; row.triagedAt = nowIso(); markDirty(); return { rejected: row.id }; }
+      if (seg[2] === 'finish') { await finishRow(row); window.dispatchEvent(new CustomEvent('lu:inbox-changed')); return { finished: row.id }; }
       if (seg[2] === 'restore') { row.triageStatus = 'pending'; row.triagedAt = null; markDirty(); return { restored: row.id }; }
       if (seg[2] === 'accept') {
         const b = body || {};
@@ -1728,7 +1823,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
       window.addEventListener('lu:opportunities-changed', publishGlobals);
       document.getElementById('root').innerHTML = '';
       APP_READY = true;
-      processQueue();
+      processQueue(); // also finishes items an earlier outage left half-done
     } catch (err) {
       console.error('[Level Up] bootstrap failed:', err);
       if (!LOCAL_MODE && (err.status === 401 || err.status === 403)) localStorage.removeItem(LS_TOKEN);

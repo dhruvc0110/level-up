@@ -72,6 +72,7 @@ function InboxView({ onOpenOpp, onNavSettings }) {
           )}
 
           <LinkedInSyncReport onOpenOpp={onOpenOpp} onChanged={load}/>
+          <UnfinishedBanner/>
 
           {items.length === 0 && !error && (
             <EmptyState onSync={sync} syncing={syncing}/>
@@ -215,7 +216,8 @@ function TriageRow({ item, open, onOpen, onAccepted, onRejected, dim, disabled, 
             {' · '}
             {item.subject}
           </div>
-          {showError && item.errorMessage && (
+          {isUnfinished(item) && <UnfinishedLine item={item}/>}
+          {showError && item.errorMessage && !isUnfinished(item) && (
             <div style={{ fontSize: 12, color: 'var(--signal)', marginTop: 6 }}>
               {item.errorMessage}
             </div>
@@ -238,7 +240,7 @@ function TriageRow({ item, open, onOpen, onAccepted, onRejected, dim, disabled, 
 
       {/* Expanded editor */}
       {open && (
-        <ExpandedEditor item={item} parsed={parsed} onAccepted={onAccepted} onRejected={onRejected}/>
+        <ExpandedEditor key={item.parsedAt || 'p'} item={item} parsed={parsed} onAccepted={onAccepted} onRejected={onRejected}/>
       )}
     </div>
   );
@@ -339,7 +341,7 @@ function ExpandedEditor({ item, parsed, onAccepted, onRejected }) {
           <JobIntel enrichment={item.enrichment}/>
         </div>
       )}
-      {item.kind === 'linkedin' && (!item.enrichment || item.enrichment.partial) && (
+      {item.kind === 'linkedin' && (!item.enrichment || item.enrichment.partial) && !(item.pendingDetail && item.enrichError) && (
         <div style={{ fontSize: 12, color: item.enrichError ? 'var(--signal)' : 'var(--ink-3)', margin: '-6px 0 16px' }}>
           {item.enrichError
             ? <>Couldn't read this job's page details ({item.enrichError}). Open the job on LinkedIn and click the Sync to Level Up bookmark there to retry.</>
@@ -495,6 +497,62 @@ function LinkedInSyncReport({ onOpenOpp, onChanged }) {
                 : <span>still in your Inbox below</span>}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Items Claude couldn't finish (usage limit, outage): the text is kept, so they can be finished later.
+function isUnfinished(item) {
+  return !!(item && (item.needsClaude || (item.parsed && item.parsed.guessed) || item.parseStatus === 'failed' || (item.pendingDetail && item.enrichError)));
+}
+function FinishButton({ id, label }) {
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const go = async (e) => {
+    e.stopPropagation();
+    setBusy(true); setErr(null);
+    try { await LU_API.post('/api/inbox/' + id + '/finish', {}); }
+    catch (x) { setErr(String(x.message || x).slice(0, 160)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button onClick={go} disabled={busy} style={{ appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--ink-1)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3, fontFamily: 'var(--sans)' }}>
+        {busy ? 'Finishing…' : (label || 'Finish now')}
+      </button>
+      {err && <span style={{ color: 'var(--signal)' }}> · still couldn't: {err}</span>}
+    </>
+  );
+}
+function UnfinishedLine({ item }) {
+  const why = (item.needsClaude && item.needsClaude.error) || item.enrichError || item.errorMessage || 'Claude was unavailable';
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ fontSize: 12, color: 'oklch(70% 0.12 75)', marginTop: 6 }}>
+      Not finished: {why}. Saved, so nothing is lost. <FinishButton id={item.id}/>
+    </div>
+  );
+}
+function UnfinishedBanner() {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const d = window.LU_CORE && window.LU_CORE.doc();
+  const rows = d ? d.triage.filter((t) => t.triageStatus === 'pending' && isUnfinished(t)) : [];
+  if (!rows.length) return null;
+  const why = (rows.find((r) => r.needsClaude) || {}).needsClaude;
+  const all = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await LU_API.post('/api/inbox/finish-all', {});
+      setMsg(r && r.left ? `${r.done} finished, ${r.left} still waiting: Claude is still unavailable. Try again once your usage limit resets.` : null);
+    } catch (e) { setMsg(String(e.message || e).slice(0, 200)); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ border: '1px solid oklch(70% 0.12 75 / 0.5)', background: 'oklch(70% 0.12 75 / 0.08)', borderRadius: 4, padding: '12px 16px', marginBottom: 18, fontSize: 13.5, color: 'var(--ink-1)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span>{rows.length === 1 ? '1 saved item wasn\'t finished' : `${rows.length} saved items weren't finished`}{why ? ` (${why.error})` : ''}. {rows.length === 1 ? 'Its text is' : 'Their text is'} kept: finish now, or Level Up tries again next time it opens.</span>
+        <Btn size="s" variant="primary" disabled={busy} onClick={all}>{busy ? 'Finishing…' : 'Finish all'}</Btn>
+      </div>
+      {msg && <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 6 }}>{msg}</div>}
     </div>
   );
 }

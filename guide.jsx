@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '16 Oct 2026';
+const GUIDE_UPDATED = '21 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -439,6 +439,7 @@ const GUIDE_CHAPTERS = [
         ["I ran the LinkedIn button but nothing showed up", <>Watch the corner counter. Jobs land one at a time (10–15 seconds each). If the LinkedIn box said <B>Read 0 job pages</B>, the tab wasn't in front; click the bookmark again and keep it visible.</>],
         ["“Hiring manager not read yet”", <>Only the Saved-list card came through. Open the job on LinkedIn, scroll down, click the bookmark there.</>],
         ["“Couldn't read this job's page details”", <>Claude was briefly unavailable. Same fix: click the bookmark on that job's page.</>],
+        ["A saved job or email says “Not finished”", <>Claude stopped answering partway (usually its usage limit). Nothing is lost: the job's page text or the email is kept. Once your limit is raised or resets, click <B>Finish now</B> on the item, or <B>Finish all</B> in the Inbox banner. Level Up also tries again by itself each time it opens (up to 3 times per item). Until then you can still accept it: its role and company are filled in from the LinkedIn card.</>],
         ["A job I saved on LinkedIn didn't appear", <>Level Up never imports the same job twice. After a sync, the Inbox shows <B>LinkedIn sync: … already in Level Up</B>, naming each one and where it is: in your Pipeline (click <B>Open</B>), still in the Inbox, or rejected earlier (click <B>Bring back to Inbox</B>).</>],
         ["Some saved jobs are missing", <>LinkedIn shows 10 per page. Go to the next page of Saved and click the bookmark again.</>],
         ["The company profile looks wrong", <>Click <B>Refresh</B> on the profile. If it's a recruiter posting, it's skipped on purpose.</>],
@@ -462,6 +463,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['21 Oct 2026', [
+          'If Claude stops partway through a sync (for example, your usage limit is hit), jobs and emails are no longer left half-saved: the text is kept, the Inbox shows “Not finished” with Finish now / Finish all, and Level Up finishes them by itself next time it opens. Re-syncing a stuck job also finishes it.',
+        ]],
         ['16 Oct 2026', [
           'LinkedIn sync now names the saved jobs Level Up already had, and where they are (Pipeline, Inbox, or rejected with a Bring back button), instead of only counting them.',
         ]],
