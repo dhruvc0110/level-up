@@ -503,7 +503,9 @@ function LinkedInSyncReport({ onOpenOpp, onChanged }) {
 
 // Items Claude couldn't finish (usage limit, outage): the text is kept, so they can be finished later.
 function isUnfinished(item) {
-  return !!(item && (item.needsClaude || (item.parsed && item.parsed.guessed) || item.parseStatus === 'failed' || (item.pendingDetail && item.enrichError)));
+  const p = item && item.parsed;
+  return !!(item && (item.needsClaude || (p && p.guessed) || item.parseStatus === 'failed' || (item.pendingDetail && item.enrichError)
+    || (p && /^Claude unavailable/.test(p.reasoning || '')) || (item.kind === 'linkedin' && item.parseStatus !== 'not_opportunity' && (!p || (!p.company && !p.role)))));
 }
 function FinishButton({ id, label }) {
   const [busy, setBusy] = React.useState(false);

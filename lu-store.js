@@ -969,7 +969,10 @@ company_size and industry come from what you know about the company; use null if
       people: (Array.isArray(d.people) ? d.people : []).slice(0, 15).map((p) => ({ url: p.url, text: String(p.text || '').slice(0, 200) })) };
   }
   function unfinished(row) {
-    return !!(row.needsClaude || (row.parsed && row.parsed.guessed) || row.parseStatus === 'failed' || (row.pendingDetail && row.enrichError));
+    const p = row.parsed;
+    return !!(row.needsClaude || (p && p.guessed) || row.parseStatus === 'failed' || (row.pendingDetail && row.enrichError)
+      // Left half-saved before this check existed: card guesses, or no role and no company.
+      || (p && /^Claude unavailable/.test(p.reasoning || '')) || (row.kind === 'linkedin' && row.parseStatus !== 'not_opportunity' && (!p || (!p.company && !p.role))));
   }
   async function finishRow(row) {
     if (row.kind === 'linkedin') {
