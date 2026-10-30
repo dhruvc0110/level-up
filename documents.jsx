@@ -757,4 +757,74 @@ function LetterWorkspace({ opp, onUpdate }) {
   );
 }
 
-Object.assign(window, { ResumeWorkspace, LetterWorkspace, DocPreview });
+// ── Your own final version of the resume for this job ───────────────────
+// Upload Word/PDF → Claude reads it → review what's new for the Career profile →
+// kept as "My final" (file in Drive) and used for the cover letter.
+function MyFinalResume({ opp, onUpdate, compact }) {
+  const mine = opp.docs && opp.docs.myResume;
+  const [busy, setBusy] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [proposal, setProposal] = React.useState(null);
+  const fileRef = React.useRef(null);
+  const L = window.LU_CAREER, D = window.LU_DOCS;
+  const saveMine = (p, applied) => {
+    const rec = { name: p.source.name, uploadedAt: new Date().toISOString(), driveUrl: p.source.driveUrl || null, driveId: p.source.driveId || null,
+      content: D.compactFinal(p.extracted), profileUpdated: !!applied };
+    onUpdate({ ...opp, docs: { ...(opp.docs || {}), myResume: rec } });
+  };
+  const onFile = async (e) => {
+    const f = (e.target.files || [])[0];
+    e.target.value = '';
+    if (!f) return;
+    setError(null); setBusy(`Claude is reading ${f.name}… usually under a minute.`);
+    try { setProposal(await L.importFile(f, 'resume')); }
+    catch (err) { setError(String(err.message || err).slice(0, 200)); }
+    finally { setBusy(null); }
+  };
+  const apply = (p) => {
+    const r = L.applyProposal(p);
+    saveMine(p, true); setProposal(null);
+    window.LU_CORE.pill(`Saved as My final · profile: ${r.added} added · ${r.confirmed} confirmed · ${r.updated} updated`);
+  };
+  const skip = () => { saveMine(proposal, false); setProposal(null); window.LU_CORE.pill('Saved as My final (Career profile unchanged)'); };
+  const remove = () => { if (!window.confirm('Remove your final version from this job? The file stays in your Drive, and your Career profile keeps any updates.')) return; const docs = { ...(opp.docs || {}) }; delete docs.myResume; onUpdate({ ...opp, docs }); };
+  if (!L || !D) return null;
+  const link = { appearance: 'none', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--ink-2)', textDecoration: 'underline', textDecorationColor: 'var(--line-2)', textUnderlineOffset: 3, fontFamily: 'var(--sans)' };
+  if (compact) {
+    return mine ? <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>Drafts from <b style={{ fontWeight: 500, color: 'var(--ink-2)' }}>My final</b> resume ({mine.name})</span> : null;
+  }
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-3)' }}>
+        <input ref={fileRef} type="file" accept=".pdf,.docx" style={{ display: 'none' }} onChange={onFile}/>
+        {mine ? (
+          <>
+            <span><b style={{ fontWeight: 500, color: 'oklch(62% 0.12 150)' }}>✓ My final</b>: {mine.name} · {new Date(mine.uploadedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{mine.profileUpdated ? ' · profile updated' : ''}</span>
+            {mine.driveUrl && <a href={mine.driveUrl} target="_blank" rel="noopener noreferrer" style={link}>Open ↗</a>}
+            <button style={link} disabled={!!busy || !!proposal} onClick={() => fileRef.current && fileRef.current.click()}>Replace</button>
+            <button style={{ ...link, color: 'var(--ink-4)' }} onClick={remove}>Remove</button>
+          </>
+        ) : (
+          <button style={{ ...link, color: 'var(--ink-1)' }} disabled={!!busy || !!proposal} onClick={() => fileRef.current && fileRef.current.click()}>⇪ Upload my version (Word or PDF)</button>
+        )}
+        {busy && <span>{busy}</span>}
+        {error && <span style={{ color: 'var(--signal)' }}>Couldn’t read it: {error}</span>}
+      </span>
+      {proposal && typeof ImportReview === 'function' && (
+        <ModalShell onClose={skip} width={900}>
+          <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--line-1)' }}>
+            <div className="serif" style={{ fontSize: 20, color: 'var(--ink-1)' }}>Your version: what's new for your Career profile</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 4 }}>
+              It's saved as <b style={{ fontWeight: 500 }}>My final</b> for this job either way. <b style={{ fontWeight: 500 }}>Apply to my profile</b> adds the results and wording you approve; <b style={{ fontWeight: 500 }}>Keep as My final only</b> leaves your profile unchanged.
+            </div>
+          </div>
+          <div style={{ padding: '14px 22px', overflow: 'auto' }}>
+            <ImportReview proposal={proposal} onApply={apply} onCancel={skip} cancelLabel="Keep as My final only"/>
+          </div>
+        </ModalShell>
+      )}
+    </span>
+  );
+}
+
+Object.assign(window, { ResumeWorkspace, LetterWorkspace, DocPreview, MyFinalResume });

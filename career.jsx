@@ -254,7 +254,7 @@ function RoleCard({ r, achievements, sourceNames }) {
 }
 
 // ── Import review (new / known / conflicts) ──────────────────────────────
-function ImportReview({ proposal, onApply, onCancel }) {
+function ImportReview({ proposal, onApply, onCancel, cancelLabel }) {
   const [p, setP] = React.useState(proposal);
   const [, force] = React.useState(0);
   const L = window.LU_CAREER;
@@ -337,7 +337,7 @@ function ImportReview({ proposal, onApply, onCancel }) {
       ))}
       <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
         <Btn variant="primary" icon="check" onClick={() => onApply(p)}>Apply to my profile</Btn>
-        <Btn variant="ghost" onClick={onCancel}>Discard</Btn>
+        <Btn variant="ghost" onClick={onCancel}>{cancelLabel || 'Discard'}</Btn>
       </div>
     </div>
   );

@@ -516,7 +516,9 @@ Output a SINGLE JSON object, no prose around it:
       extract(file, kind),
       core().uploadToDriveFolder(file, 'Sources').catch(() => ({ id: null, url: null })),
     ]);
-    return markRewordedDuplicates(buildProposal(extracted, { kind, name: file.name, driveId: stored.id, driveUrl: stored.url }));
+    const proposal = await markRewordedDuplicates(buildProposal(extracted, { kind, name: file.name, driveId: stored.id, driveUrl: stored.url }));
+    proposal.extracted = extracted; // the document's own content (used e.g. for a final resume a user uploads)
+    return proposal;
   }
 
   // ── Personas: which proof supports each one ─────────────────────────────

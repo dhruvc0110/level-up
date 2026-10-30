@@ -239,26 +239,43 @@ Every role in the record must appear once in "roles". Never write the R/A codes 
   }
 
   // ── Claude: draft a cover letter ──────────────────────────────────────
+  // The resume the user finalised themselves and uploaded for this job, as plain text.
+  function finalResume(final) {
+    if (!final || !final.content) return '';
+    const c = final.content;
+    return [c.headline && 'Headline: ' + c.headline, c.summary && 'Summary: ' + c.summary,
+      ...(c.roles || []).map((r) => `${r.title || ''}${r.company ? ', ' + r.company : ''}${r.start ? ' (' + r.start + '–' + (r.end || '') + ')' : ''}\n` + (r.bullets || []).map((b) => '- ' + b).join('\n')),
+      (c.skills || []).length && 'Skills: ' + c.skills.join(', ')].filter(Boolean).join('\n\n').slice(0, 12000);
+  }
+  function compactFinal(extracted) {
+    const e = extracted || {};
+    return { headline: (e.person && e.person.headline) || null, summary: e.summary || null,
+      roles: (e.roles || []).map((r) => ({ title: r.title, company: r.company, start: r.start, end: r.end, bullets: (r.achievements || []).map((a) => a.text).filter(Boolean) })),
+      skills: (e.expertise || []).filter((x) => x.type === 'capability' || x.type === 'platform').map((x) => x.name).slice(0, 30) };
+  }
+
   async function draftLetter(opp, opts) {
     const proof = window.LU_OUTREACH ? window.LU_OUTREACH.proofFor(opp.persona).slice(0, 12) : [];
+    const final = finalResume(opp.docs && opp.docs.myResume);
     const e = opp.enrichment || {};
     const to = (e.hiringManager && e.hiringManager.name) ? e.hiringManager : (opp.contact && opp.contact.warmth !== 'recruiter' ? opp.contact : null);
     const user = [jobBlock(opp), personaBlock(opp),
       `ADDRESSEE: ${to ? to.name + (to.title ? ', ' + to.title : '') : 'unknown: use "Dear Hiring Manager,"'}`,
-      'PROOF (use only these):\n' + (proof.length ? proof.map((p, i) => `P${i}: ${p.a.text}${(p.a.metrics || []).length ? ' [numbers: ' + p.a.metrics.map((m) => m.value).join(', ') + ']' : ''} (${p.role.title || ''}, ${p.role.company || ''})`).join('\n') : '(none)'),
+      final && "THE EXECUTIVE'S OWN FINAL RESUME FOR THIS JOB (they wrote it; draw proof and wording from here first, and keep the letter consistent with it):\n" + final,
+      'PROOF (use only these' + (final ? ' and the final resume above' : '') + '):\n' + (proof.length ? proof.map((p, i) => `P${i}: ${p.a.text}${(p.a.metrics || []).length ? ' [numbers: ' + p.a.metrics.map((m) => m.value).join(', ') + ']' : ''} (${p.role.title || ''}, ${p.role.company || ''})`).join('\n') : '(none)'),
       opts && opts.base ? 'CURRENT DRAFT TO REVISE:\n' + opts.base.join('\n\n') : '', opts && opts.instruction ? "SENDER'S INSTRUCTION: " + opts.instruction : ''].filter(Boolean).join('\n\n');
     const system = `You write a cover letter for a senior executive applying for the role below, in their voice.
 
 ${core().houseStyle || ''}
 
-Rules: use ONLY facts in PROOF; never invent results, numbers, clients or relationships. 250 to 350 words in 3 or 4 paragraphs: why this company and role (be specific; use the company profile if helpful), two or three pieces of proof that match what the role needs, how they would approach the first year, and a courteous close. No subject line, no address block, no sign-off line (added separately). Never write the P codes.
+Rules: use ONLY facts in PROOF${final ? ' and the final resume' : ''}; never invent results, numbers, clients or relationships. 250 to 350 words in 3 or 4 paragraphs: why this company and role (be specific; use the company profile if helpful), two or three pieces of proof that match what the role needs, how they would approach the first year, and a courteous close. No subject line, no address block, no sign-off line (added separately). Never write the P codes.
 Output a single JSON object and nothing else: { "salutation": "Dear ...,", "paragraphs": ["...", "..."], "check": ["anything to verify before sending"] }`;
     const model = core().modelFor ? core().modelFor('documents') : core().models.parse;
     const resp = await core().claude(model, system, user, 3000, null, 'documents');
     const texts = (resp.content || []).filter((b) => b.type === 'text');
     const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '');
     const plain = (s) => String(s || '').replace(/\bP(\d+)\b/g, (m, n) => (proof[+n] ? '“' + proof[+n].a.text.split(/\s+/).slice(0, 6).join(' ') + '…”' : m));
-    return { salutation: plain(d.salutation) || 'Dear Hiring Manager,', paragraphs: (Array.isArray(d.paragraphs) ? d.paragraphs : []).map(plain).filter(Boolean),
+    return { fromFinal: !!final, salutation: plain(d.salutation) || 'Dear Hiring Manager,', paragraphs: (Array.isArray(d.paragraphs) ? d.paragraphs : []).map(plain).filter(Boolean),
       check: (Array.isArray(d.check) ? d.check : []).map(plain).filter(Boolean).slice(0, 4), recipient: to ? [to.name, to.title].filter(Boolean).join(', ') : '',
       used: proof.map((p) => p.a.id), draftedAt: core().nowIso() };
   }
@@ -389,5 +406,5 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
     return { id: r.id, url: r.url, bytes: blob.size };
   }
 
-  window.LU_DOCS = { DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
+  window.LU_DOCS = { finalResume, compactFinal, DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
 })();

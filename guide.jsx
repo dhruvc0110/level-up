@@ -5,7 +5,7 @@
 // screenshot that no longer matches (site/guide/*.jpg, taken with fictitious
 // demo data only), GUIDE_UPDATED, and a "What's new" entry.
 
-const GUIDE_UPDATED = '21 Oct 2026';
+const GUIDE_UPDATED = '30 Oct 2026';
 
 // ── Building blocks ───────────────────────────────────────────────────────
 function GShot({ src, caption, width }) {
@@ -160,6 +160,8 @@ const GUIDE_CHAPTERS = [
         <>Click <B>Create Google Doc</B>. Level Up builds the document and saves it in <B>Level Up / Documents</B> in your Drive, then opens it. Edit it there, or use File → Download for Word or PDF. Each one is listed under <B>Versions</B>; click <B>Mark as sent</B> when it goes out.</>,
       ]}/>
       <GShot src="resume-pages.jpg" caption="The pages as they'll print: a sub-bullet (–), your own bullet with its toolbar showing, and page 2 starting where you added a break." width={520}/>
+      <GH>Your own final version</GH>
+      <GP>Rewrote the draft yourself? On the Resume tab, click <B>Upload my version</B> (Word or PDF). Claude reads it and shows what's new for your Career profile; <B>Apply to my profile</B> adds what you approve, <B>Keep as My final only</B> changes nothing. Either way it's saved as <B>✓ My final</B> for this job (the file goes to your Drive), and the Cover letter then drafts from it. <B>Replace</B> or <B>Remove</B> it any time.</GP>
       <GP><B>Cover letter</B> works the same way: <B>Draft with Claude</B> (about 2¢) writes 250–350 words from the job, the company and your strongest proof, in your persona's voice. Edit the paragraphs, revise with an instruction ("shorter", "warmer"), then <B>Create Google Doc</B>. It uses the same header as your resume.</GP>
       <GTip><B>Send PDFs.</B> In the Google Doc use File → Download → PDF: the fonts stay exact. A Word download can look different on a computer without those fonts.</GTip>
       <GTip>School-level education is left off resumes automatically. The page count in the preview is a close estimate; the Google Doc may differ by a line or two.</GTip>
@@ -463,6 +465,9 @@ const GUIDE_CHAPTERS = [
     id: 'whatsnew', title: "What's new", blurb: 'Changes, newest first',
     body: () => <>
       {[
+        ['30 Oct 2026', [
+          'Resume tab: Upload my version (Word or PDF). Level Up offers its new results and wording to your Career profile for approval, keeps it as My final for the job, and drafts the cover letter from it.',
+        ]],
         ['21 Oct 2026', [
           'If Claude stops partway through a sync (for example, your usage limit is hit), jobs and emails are no longer left half-saved: the text is kept, the Inbox shows “Not finished” with Finish now / Finish all, and Level Up finishes them by itself next time it opens. Re-syncing a stuck job also finishes it.',
         ]],

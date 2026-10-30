@@ -70,7 +70,10 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete, inline, tab, onTab, lis
         </>) : (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {/* Model for resumes and cover letters, visible before and after drafting */}
-            <div style={{ padding: '8px 22px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto' }}><ModelPicker task="documents"/></div>
+            <div style={{ padding: '8px 22px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+              <ModelPicker task="documents"/>
+              {typeof MyFinalResume === 'function' && <MyFinalResume opp={opp} onUpdate={onUpdate} compact={docTab === 'letter'}/>}
+            </div>
             <div style={{ flex: 1, minHeight: 0 }}>
             {typeof ResumeWorkspace === 'function'
               ? (docTab === 'resume' ? <ResumeWorkspace opp={opp} onUpdate={onUpdate}/> : <LetterWorkspace opp={opp} onUpdate={onUpdate}/>)
