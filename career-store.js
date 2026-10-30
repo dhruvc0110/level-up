@@ -769,7 +769,7 @@ Rules: in "verdict", "note", "why" and "fix", never write the A/E codes: refer t
   }
 
   window.LU_CAREER = {
-    importFile, buildProposal, proposalCounts, applyProposal,
+    readFile, importFile, buildProposal, proposalCounts, applyProposal,
     update, add, remove, confirm, setPerson, resolveConflict, setPersonaTags, markUsed,
     reviewItems, isStale, graph, STALE_DAYS,
     findDuplicates, mergeDuplicates, keepSeparate, useVariant,

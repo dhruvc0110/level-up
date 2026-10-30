@@ -255,6 +255,35 @@ Every role in the record must appear once in "roles". Never write the R/A codes 
       skills: (e.expertise || []).filter((x) => x.type === 'capability' || x.type === 'platform').map((x) => x.name).slice(0, 30) };
   }
 
+  // ── The layout of the user's own resume: each client/project line with its sub-bullets ──
+  const LAYOUT_PROMPT = `You copy the WORK EXPERIENCE section of a resume exactly as it is laid out, so it can be reused in application forms.
+For each role, in document order: title, company, location, start, end (as written), "intro" (any text directly under the role before the first client/project line or bullet, else null), and "groups": each client or project line ("heading", verbatim, e.g. "Global multi-brand restaurant company, $27B revenue") with the bullet points listed under it ("bullets", verbatim, in order). Bullets directly under a role with no client/project line go in one group with heading null.
+Copy wording exactly; do not merge, split, reorder, summarise or add anything. Skip everything outside Work Experience.
+Output one JSON object and nothing else: { "roles": [ { "title": "", "company": "", "location": null, "start": "", "end": "", "intro": null, "groups": [ { "heading": "..." | null, "bullets": ["..."] } ] } ] }`;
+  async function readLayout(file) {
+    const read = await window.LU_CAREER.readFile(file);
+    const content = read.pdf
+      ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: read.pdf } }, { type: 'text', text: 'Copy the work experience layout.' }]
+      : 'RESUME TEXT:\n' + String(read.text || '').slice(0, 60000) + '\n\nCopy the work experience layout.';
+    // PDFs need Claude (document reading); Word text works with any model.
+    const model = read.pdf ? 'claude-sonnet-5-5' : (core().modelFor ? core().modelFor('documents') : core().models.parse);
+    const resp = await core().claude(model, LAYOUT_PROMPT, content, 12000, null, 'documents');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '') || {};
+    const roles = (d.roles || []).map((r) => ({ title: r.title || '', company: r.company || '', location: r.location || null, start: r.start || '', end: r.end || '', intro: r.intro || null,
+      groups: (r.groups || []).map((g) => ({ heading: g.heading || null, bullets: (g.bullets || []).map((b) => String(b).trim()).filter(Boolean) })).filter((g) => g.heading || g.bullets.length) }));
+    if (!roles.length) throw new Error('Claude could not find a work experience section in that file');
+    return roles;
+  }
+  // Older uploads saved no layout: fetch the file back from Drive and read it.
+  async function ensureLayout(opp) {
+    const mine = opp.docs && opp.docs.myResume;
+    if (!mine || mine.layout) return mine && mine.layout;
+    if (!mine.driveId) throw new Error('Upload your version again on the Resume tab so its layout can be read.');
+    const file = await core().downloadDriveFile(mine.driveId, mine.name);
+    return readLayout(file);
+  }
+
   // ── Application forms (Workday and similar): plain text per role ────────
   // Source: the user's own final resume for this job, else the tailored resume, else the Career profile.
   function applicationRoles(opp) {
@@ -262,6 +291,10 @@ Every role in the record must appear once in "roles". Never write the R/A codes 
     const mine = opp.docs && opp.docs.myResume && opp.docs.myResume.content;
     const careerRole = (r) => (c.roles || []).find((x) => normCo(x.company) === normCo(r.company) && String(x.title || '').toLowerCase() === String(r.title || '').toLowerCase())
       || (c.roles || []).find((x) => normCo(x.company) === normCo(r.company)) || {};
+    const layout = opp.docs && opp.docs.myResume && opp.docs.myResume.layout;
+    if (layout && layout.length) {
+      return { source: 'mine', roles: layout.map((r) => Object.assign({}, r, { location: r.location || careerRole(r).location || '', bullets: r.groups.flatMap((g) => g.bullets) })) };
+    }
     if (mine && (mine.roles || []).length) {
       return { source: 'mine', roles: mine.roles.map((r) => Object.assign({}, r, { location: r.location || careerRole(r).location || '' })) };
     }
@@ -293,14 +326,34 @@ Every role in the record must appear once in "roles". Never write the R/A codes 
     }
     return text;
   }
+  // Grouped text, as the resume lays it out: client/project line, then its "• " lines; groups separated by a blank line.
+  function formatGroupedText(intro, groups, limit) {
+    const gs = (groups || []).map((g) => ({ heading: g.heading ? String(g.heading).trim() : null, bullets: (g.bullets || []).map((b) => String(b).replace(/^[•\-*–\s]+/, '').replace(/\s+/g, ' ').trim()).filter(Boolean) }));
+    const render = () => [intro ? String(intro).trim() : '', ...gs.map((g) => [g.heading, ...g.bullets.map((b) => '• ' + b)].filter(Boolean).join('\n'))].filter(Boolean).join('\n\n');
+    let text = render();
+    if (limit) {
+      // Trim the longest group first (keeping at least one line each), then drop the last groups.
+      while (text.length > limit) {
+        const big = gs.reduce((a, g) => (g.bullets.length > (a ? a.bullets.length : 0) ? g : a), null);
+        if (big && big.bullets.length > 1) big.bullets.pop();
+        else if (gs.length > 1) gs.pop();
+        else break;
+        text = render();
+      }
+      if (text.length > limit) text = text.slice(0, limit - 1).replace(/\s+\S*$/, '') + '…';
+    }
+    return text;
+  }
   function plainApplication(opp, limit) {
     const { source, roles } = applicationRoles(opp);
     return { source, limit, at: core().nowIso(), claude: false, roles: roles.map((r, i) => ({ i, title: r.title || '', company: r.company || '', location: r.location || '',
-      from: formDate(r.start), to: formDate(r.end), current: /present|current|now/i.test(String(r.end || '')) || !r.end, text: formatRoleText('', r.bullets, limit) })) };
+      from: formDate(r.start), to: formDate(r.end), current: /present|current|now/i.test(String(r.end || '')) || !r.end,
+      text: r.groups ? formatGroupedText(r.intro, r.groups, limit) : formatRoleText('', r.bullets, limit) })) };
   }
   async function writeApplication(opp, limit) {
     const base = plainApplication(opp, limit);
     const { roles } = applicationRoles(opp);
+    if (roles.some((r) => r.groups)) return writeGroupedApplication(base, roles, limit);
     if (!roles.length) throw new Error('No roles to describe yet: add your resume to the Career profile or upload your version.');
     const system = `You turn an executive's resume into the "role description" text that online application forms (Workday, Taleo, SuccessFactors) ask for under each job in Work Experience.
 
@@ -320,6 +373,35 @@ Output one JSON object and nothing else: { "roles": [ { "i": 0, "scope": "...", 
     const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '') || {};
     const byI = new Map((d.roles || []).map((x) => [+x.i, x]));
     base.roles.forEach((r) => { const x = byI.get(r.i); if (x) r.text = formatRoleText(x.scope, (x.bullets || []).length ? x.bullets : roles[r.i].bullets, limit); });
+    base.claude = true;
+    return base;
+  }
+
+  // Keeps the resume's own structure: each client/project line once, then its strongest 2–3 results.
+  async function writeGroupedApplication(base, roles, limit) {
+    const system = `You turn an executive's resume into the "role description" text that online application forms (Workday, Taleo, SuccessFactors) ask for under each job.
+
+${core().houseStyle || ''}
+
+The resume is organised by client or project: a line describing the client/project, then sub-bullets with what was achieved there. Keep that structure:
+- For each role keep its client/project groups in the same order. Keep each "heading" as one line (you may tighten it, never drop the client description).
+- Under each heading give the 2 or 3 strongest results ("bullets"), one line each. Do NOT repeat the client description inside the bullets: start with the action and the result.
+- "intro" is an optional one-line scope for the role, only if the resume gives one; else null.
+- Use ONLY facts in the resume lines. Never invent scope, numbers, clients or results. Plain text only, no markdown, no trailing full stops.
+- Each role must fit in ${limit || 4000} characters when written as: intro, blank line, then for each group its heading line followed by "• " lines, groups separated by a blank line. Drop the weakest bullets (never the headings) to fit.
+Output one JSON object and nothing else: { "roles": [ { "i": 0, "intro": null, "groups": [ { "heading": "...", "bullets": ["...", "..."] } ] } ] }`;
+    const user = roles.map((r, i) => `ROLE ${i}: ${r.title || ''} at ${r.company || ''} (${r.start || ''}–${r.end || ''})` + (r.intro ? '\nIntro: ' + r.intro : '') + '\n' +
+      (r.groups || [{ heading: null, bullets: r.bullets || [] }]).map((g) => (g.heading ? 'CLIENT/PROJECT: ' + g.heading + '\n' : '') + g.bullets.map((b) => '  - ' + b).join('\n')).join('\n')).join('\n\n');
+    const model = core().modelFor ? core().modelFor('documents') : core().models.parse;
+    const resp = await core().claude(model, system, user.slice(0, 40000), 8000, null, 'documents');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '') || {};
+    const byI = new Map((d.roles || []).map((x) => [+x.i, x]));
+    base.roles.forEach((r) => {
+      const x = byI.get(r.i), src = roles[r.i];
+      if (x && (x.groups || []).length) r.text = formatGroupedText(x.intro, x.groups, limit);
+      else if (src.groups) r.text = formatGroupedText(src.intro, src.groups, limit);
+    });
     base.claude = true;
     return base;
   }
@@ -476,5 +558,5 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
     return { id: r.id, url: r.url, bytes: blob.size };
   }
 
-  window.LU_DOCS = { finalResume, compactFinal, applicationRoles, plainApplication, writeApplication, formatRoleText, formDate, DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
+  window.LU_DOCS = { readLayout, ensureLayout, formatGroupedText, finalResume, compactFinal, applicationRoles, plainApplication, writeApplication, formatRoleText, formDate, DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
 })();

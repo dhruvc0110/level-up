@@ -767,9 +767,10 @@ function MyFinalResume({ opp, onUpdate, compact }) {
   const [proposal, setProposal] = React.useState(null);
   const fileRef = React.useRef(null);
   const L = window.LU_CAREER, D = window.LU_DOCS;
+  const layoutRef = React.useRef(null);
   const saveMine = (p, applied) => {
     const rec = { name: p.source.name, uploadedAt: new Date().toISOString(), driveUrl: p.source.driveUrl || null, driveId: p.source.driveId || null,
-      content: D.compactFinal(p.extracted), profileUpdated: !!applied };
+      content: D.compactFinal(p.extracted), layout: layoutRef.current || null, profileUpdated: !!applied };
     onUpdate({ ...opp, docs: { ...(opp.docs || {}), myResume: rec } });
   };
   const onFile = async (e) => {
@@ -777,7 +778,10 @@ function MyFinalResume({ opp, onUpdate, compact }) {
     e.target.value = '';
     if (!f) return;
     setError(null); setBusy(`Claude is reading ${f.name}… usually under a minute.`);
-    try { setProposal(await L.importFile(f, 'resume')); }
+    // Its layout (client lines and their sub-bullets) is read alongside, for application forms.
+    layoutRef.current = null;
+    const layout = D.readLayout ? D.readLayout(f).catch(() => null) : Promise.resolve(null);
+    try { const [p, lay] = await Promise.all([L.importFile(f, 'resume'), layout]); layoutRef.current = lay; setProposal(p); }
     catch (err) { setError(String(err.message || err).slice(0, 200)); }
     finally { setBusy(null); }
   };
@@ -841,11 +845,25 @@ function ApplicationWorkspace({ opp, onUpdate }) {
   const src = D.applicationRoles(opp);
   const SRC = { mine: 'your final version (My final)', tailored: 'the tailored resume for this job', profile: 'your Career profile (no resume for this job yet)' };
   const save = (next) => onUpdate({ ...opp, docs: { ...(opp.docs || {}), application: next } });
-  const write = async () => {
-    setBusy(true); setError(null);
-    try { save(await D.writeApplication(opp, limit)); } catch (e) { setError(String(e.message || e).slice(0, 200)); } finally { setBusy(false); }
+  const mine = opp.docs && opp.docs.myResume;
+  const [step, setStep] = React.useState(null);
+  // Older uploads have no layout yet: read it from the file in Drive first (once).
+  const withLayout = async () => {
+    if (!mine || mine.layout) return opp;
+    setStep('Reading the layout of your version…');
+    const layout = await D.ensureLayout(opp);
+    const next = { ...opp, docs: { ...(opp.docs || {}), myResume: { ...mine, layout } } };
+    onUpdate(next);
+    return next;
   };
-  const plain = () => save(D.plainApplication(opp, limit));
+  const run = async (fn) => {
+    setBusy(true); setError(null);
+    try { const o = await withLayout(); setStep(null); const a = await fn(o); onUpdate({ ...o, docs: { ...(o.docs || {}), application: a } }); }
+    catch (e) { setError(String(e.message || e).slice(0, 200)); }
+    finally { setBusy(false); setStep(null); }
+  };
+  const write = () => run((o) => D.writeApplication(o, limit));
+  const plain = () => run(async (o) => D.plainApplication(o, limit));
   const copy = (key, text) => { navigator.clipboard && navigator.clipboard.writeText(text || ''); setCopied(key); setTimeout(() => setCopied(null), 1200); };
   const setRole = (i, patch) => save({ ...app, roles: app.roles.map((r) => (r.i === i ? { ...r, ...patch } : r)) });
   const fieldBox = { display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--line-1)', borderRadius: 3, padding: '5px 8px', background: 'var(--bg-1)', minWidth: 0 };
@@ -875,6 +893,8 @@ function ApplicationWorkspace({ opp, onUpdate }) {
           <button style={docLink} disabled={busy || !src.roles.length} onClick={plain}>Just reformat my bullets (no AI)</button>
           <span style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>about 1–3¢</span>
         </div>
+        {mine && !mine.layout && !busy && <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginBottom: 10 }}>Your version will be read once more (from Drive) to keep its client lines and sub-bullets in order.</div>}
+        {step && <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginBottom: 10 }}>{step}</div>}
         {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 10 }}>Couldn’t write them: {error}</div>}
         {!src.roles.length && <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>No roles yet: import your resume in Career profile, or upload your version on the Resume tab.</div>}
         {app && app.roles.map((r) => (

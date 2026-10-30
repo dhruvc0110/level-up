@@ -453,6 +453,16 @@
     return ct.includes('json') ? r.json() : r.text();
   }
 
+  // A file Level Up saved to Drive (e.g. an uploaded resume), as a File.
+  async function downloadDriveFile(id, name) {
+    if (LOCAL_MODE) throw new Error('Files are only kept in Drive when signed in with Google.');
+    const tok = await getToken();
+    const r = await fetch(`${DRIVE}/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: 'Bearer ' + tok.access_token } });
+    if (!r.ok) throw new Error(r.status === 404 ? 'That file is no longer in your Drive. Upload it again.' : 'Could not open the file in Drive (' + r.status + ').');
+    const blob = await r.blob();
+    return new File([blob], name || 'resume', { type: blob.type || r.headers.get('content-type') || '' });
+  }
+
   function friendlyGoogleError(status, msg) {
     const m = msg.match(/(\S+) API has not been used in project|(\S+\s?\S*) API has not been used/);
     if (status === 403 && /has not been used|is disabled/.test(msg)) {
@@ -1637,7 +1647,7 @@ Rules: give revenue for private companies only as a clearly labelled estimate (r
   // Narrow hooks for feature modules in separate files (e.g. career-store.js).
   window.LU_CORE = {
     doc: () => DOC, markDirty, flush, claude, extractJson, nowIso, pill,
-    uploadToDriveFolder, localMode: LOCAL_MODE, modelFor, passive: () => PASSIVE, houseStyle: HOUSE_STYLE,
+    uploadToDriveFolder, downloadDriveFile, localMode: LOCAL_MODE, modelFor, passive: () => PASSIVE, houseStyle: HOUSE_STYLE,
     models: { parse: CONFIG.parseModel, quick: CONFIG.testModel },
   };
 
