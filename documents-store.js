@@ -361,7 +361,7 @@ ${core().houseStyle || ''}
 
 Rules:
 - Use ONLY the facts in each role's lines. Never invent scope, numbers, clients or results. Keep their wording where it works; tighten it.
-- For each role: "scope" is one sentence (max 220 characters) saying what the role owned (team, budget, mandate) as far as the lines show it; then "bullets": the strongest results first, each one line, no trailing full stop.
+- For each role: "scope" is a 2 to 3 sentence overview of the whole role (max 450 characters) that frames the list below it: what the role owned (team, budget, mandate) as far as the lines show it, and the outcomes it delivered, drawing the most telling results across the role. First person is fine. Then "bullets": the strongest results first, each one line, no trailing full stop.
 - Plain text only: no markdown, no bold, no headings.
 - Each role's scope plus bullets must fit in ${limit || 4000} characters when written as: scope, blank line, then one "• " line per bullet.
 - Roles with no lines: scope only, from the title and company.
@@ -386,10 +386,10 @@ ${core().houseStyle || ''}
 The resume is organised by client or project: a line describing the client/project, then sub-bullets with what was achieved there. Keep that structure:
 - For each role keep its client/project groups in the same order. Keep each "heading" as one line (you may tighten it, never drop the client description).
 - Under each heading give the 2 or 3 strongest results ("bullets"), one line each. Do NOT repeat the client description inside the bullets: start with the action and the result.
-- "intro" is an optional one-line scope for the role, only if the resume gives one; else null.
+- "summary": first, a 2 to 3 sentence overview of the whole role (max 450 characters) that frames everything below it: what the role was and the kind of work led, then the outcomes it delivered, pulling the most telling result or snippet from each main engagement (e.g. "As Senior Consulting Partner, I led transformation programmes for global enterprises that delivered ..."). First person is fine; no client names unless the lines name them; never just restate one bullet.
 - Use ONLY facts in the resume lines. Never invent scope, numbers, clients or results. Plain text only, no markdown, no trailing full stops.
-- Each role must fit in ${limit || 4000} characters when written as: intro, blank line, then for each group its heading line followed by "• " lines, groups separated by a blank line. Drop the weakest bullets (never the headings) to fit.
-Output one JSON object and nothing else: { "roles": [ { "i": 0, "intro": null, "groups": [ { "heading": "...", "bullets": ["...", "..."] } ] } ] }`;
+- Each role must fit in ${limit || 4000} characters when written as: summary, blank line, then for each group its heading line followed by "• " lines, groups separated by a blank line. Drop the weakest bullets (never the headings) to fit.
+Output one JSON object and nothing else: { "roles": [ { "i": 0, "summary": "...", "groups": [ { "heading": "...", "bullets": ["...", "..."] } ] } ] }`;
     const user = roles.map((r, i) => `ROLE ${i}: ${r.title || ''} at ${r.company || ''} (${r.start || ''}–${r.end || ''})` + (r.intro ? '\nIntro: ' + r.intro : '') + '\n' +
       (r.groups || [{ heading: null, bullets: r.bullets || [] }]).map((g) => (g.heading ? 'CLIENT/PROJECT: ' + g.heading + '\n' : '') + g.bullets.map((b) => '  - ' + b).join('\n')).join('\n')).join('\n\n');
     const model = core().modelFor ? core().modelFor('documents') : core().models.parse;
@@ -399,7 +399,7 @@ Output one JSON object and nothing else: { "roles": [ { "i": 0, "intro": null, "
     const byI = new Map((d.roles || []).map((x) => [+x.i, x]));
     base.roles.forEach((r) => {
       const x = byI.get(r.i), src = roles[r.i];
-      if (x && (x.groups || []).length) r.text = formatGroupedText(x.intro, x.groups, limit);
+      if (x && (x.groups || []).length) r.text = formatGroupedText(x.summary || x.intro, x.groups, limit);
       else if (src.groups) r.text = formatGroupedText(src.intro, src.groups, limit);
     });
     base.claude = true;
