@@ -827,4 +827,80 @@ function MyFinalResume({ opp, onUpdate, compact }) {
   );
 }
 
-Object.assign(window, { ResumeWorkspace, LetterWorkspace, DocPreview, MyFinalResume });
+// ── Application tab: Work Experience text for Workday-style forms ───────
+function ApplicationWorkspace({ opp, onUpdate }) {
+  const D = window.LU_DOCS;
+  const [, bumpModel] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => { window.addEventListener('lu:model-changed', bumpModel); return () => window.removeEventListener('lu:model-changed', bumpModel); }, []);
+  const app = opp.docs && opp.docs.application;
+  const [limit, setLimit] = React.useState((app && app.limit) || 2000);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [copied, setCopied] = React.useState(null);
+  if (!D || !D.applicationRoles) return <div style={{ padding: 28, color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load this tab.</div>;
+  const src = D.applicationRoles(opp);
+  const SRC = { mine: 'your final version (My final)', tailored: 'the tailored resume for this job', profile: 'your Career profile (no resume for this job yet)' };
+  const save = (next) => onUpdate({ ...opp, docs: { ...(opp.docs || {}), application: next } });
+  const write = async () => {
+    setBusy(true); setError(null);
+    try { save(await D.writeApplication(opp, limit)); } catch (e) { setError(String(e.message || e).slice(0, 200)); } finally { setBusy(false); }
+  };
+  const plain = () => save(D.plainApplication(opp, limit));
+  const copy = (key, text) => { navigator.clipboard && navigator.clipboard.writeText(text || ''); setCopied(key); setTimeout(() => setCopied(null), 1200); };
+  const setRole = (i, patch) => save({ ...app, roles: app.roles.map((r) => (r.i === i ? { ...r, ...patch } : r)) });
+  const fieldBox = { display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--line-1)', borderRadius: 3, padding: '5px 8px', background: 'var(--bg-1)', minWidth: 0 };
+  const copyBtn = (key, text) => (
+    <button onClick={() => copy(key, text)} title="Copy" style={{ appearance: 'none', border: 'none', background: 'none', cursor: 'pointer', color: copied === key ? 'oklch(62% 0.12 150)' : 'var(--ink-3)', fontSize: 11.5, fontFamily: 'var(--sans)', flex: '0 0 auto' }}>{copied === key ? '✓ Copied' : 'Copy'}</button>
+  );
+  const Field = ({ label, k, value }) => (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ ...docMono, fontSize: 9.5, marginBottom: 3 }}>{label}</div>
+      <div style={fieldBox}><span style={{ flex: 1, minWidth: 0, fontSize: 13, color: value ? 'var(--ink-1)' : 'var(--ink-4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || '—'}</span>{value ? copyBtn(k, value) : null}</div>
+    </div>
+  );
+  return (
+    <div style={{ height: '100%', overflow: 'auto', padding: '18px 22px 32px' }}>
+      <div style={{ maxWidth: 900 }}>
+        <div className="serif" style={{ fontSize: 20, color: 'var(--ink-1)' }}>Work experience for application forms</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, margin: '4px 0 12px' }}>
+          For Workday and similar portals: each role as separate fields, with a plain-text description that keeps its bullets when pasted. Built from {SRC[src.source]}.
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+          <label style={{ fontSize: 12.5, color: 'var(--ink-2)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>Description limit
+            <select aria-label="Description limit" value={limit} onChange={(e) => setLimit(+e.target.value)} style={docSel}>
+              {[1000, 2000, 4000, 0].map((n) => <option key={n} value={n}>{n ? n.toLocaleString() + ' characters' : 'No limit'}</option>)}
+            </select>
+          </label>
+          <Btn variant="primary" size="m" icon="sparkles" disabled={busy || !src.roles.length} onClick={write}>{busy ? 'Writing…' : (app ? 'Write again with ' : 'Write role descriptions with ') + aiName('documents')}</Btn>
+          <button style={docLink} disabled={busy || !src.roles.length} onClick={plain}>Just reformat my bullets (no AI)</button>
+          <span style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>about 1–3¢</span>
+        </div>
+        {error && <div style={{ fontSize: 12.5, color: 'var(--signal)', marginBottom: 10 }}>Couldn’t write them: {error}</div>}
+        {!src.roles.length && <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>No roles yet: import your resume in Career profile, or upload your version on the Resume tab.</div>}
+        {app && app.roles.map((r) => (
+          <div key={r.i} style={{ border: '1px solid var(--line-1)', borderRadius: 4, padding: '12px 14px', marginBottom: 12, background: 'var(--bg-2)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
+              <Field label="Job title" k={'t' + r.i} value={r.title}/>
+              <Field label="Company" k={'c' + r.i} value={r.company}/>
+              <Field label="Location" k={'l' + r.i} value={r.location}/>
+              <Field label="From (MM/YYYY)" k={'f' + r.i} value={r.from}/>
+              {r.current ? <div><div style={{ ...docMono, fontSize: 9.5, marginBottom: 3 }}>To</div><div style={{ ...fieldBox, fontSize: 12.5, color: 'var(--ink-2)' }}>Tick “I currently work here”</div></div> : <Field label="To (MM/YYYY)" k={'to' + r.i} value={r.to}/>}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '10px 0 3px' }}>
+              <span style={{ ...docMono, fontSize: 9.5 }}>Role description</span>
+              <span style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}>
+                <span style={{ fontSize: 11, color: limit && r.text.length > limit ? 'var(--signal)' : 'var(--ink-4)' }}>{r.text.length.toLocaleString()}{limit ? ' / ' + limit.toLocaleString() : ''}</span>
+                {copyBtn('d' + r.i, r.text)}
+              </span>
+            </div>
+            <textarea aria-label={'Role description for ' + r.title} value={r.text} onChange={(e) => setRole(r.i, { text: e.target.value })} rows={Math.min(14, Math.max(4, r.text.split('\n').length + 1))}
+              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-1)', color: 'var(--ink-1)', border: '1px solid var(--line-1)', borderRadius: 3, fontFamily: 'var(--sans)', fontSize: 13, lineHeight: 1.55, padding: '8px 10px', resize: 'vertical' }}/>
+          </div>
+        ))}
+        {app && <div style={{ fontSize: 11.5, color: 'var(--ink-4)' }}>Tip: paste each field into the matching box in the portal. If the portal strips the “•” characters, the lines still stay separate.</div>}
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ResumeWorkspace, LetterWorkspace, DocPreview, MyFinalResume, ApplicationWorkspace });

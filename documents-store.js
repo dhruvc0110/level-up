@@ -15,6 +15,7 @@
     return m[2] ? new Date(+m[1], +m[2] - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : m[1];
   };
   const cleanUrl = (u) => (u ? String(u).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '') : u);
+  const normCo = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]/g, ' ').replace(/\b(the|inc|llc|ltd|limited|plc|corp|corporation|co|company|group|holdings)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const sortKey = (r) => (/present/i.test(r.end || '') ? '9999' : String(r.end || r.start || '0000'));
 
   // ── Format → style spec (shared by preview and Word file) ─────────────
@@ -250,8 +251,77 @@ Every role in the record must appear once in "roles". Never write the R/A codes 
   function compactFinal(extracted) {
     const e = extracted || {};
     return { headline: (e.person && e.person.headline) || null, summary: e.summary || null,
-      roles: (e.roles || []).map((r) => ({ title: r.title, company: r.company, start: r.start, end: r.end, bullets: (r.achievements || []).map((a) => a.text).filter(Boolean) })),
+      roles: (e.roles || []).map((r) => ({ title: r.title, company: r.company, location: r.location || null, start: r.start, end: r.end, bullets: (r.achievements || []).map((a) => a.text).filter(Boolean) })),
       skills: (e.expertise || []).filter((x) => x.type === 'capability' || x.type === 'platform').map((x) => x.name).slice(0, 30) };
+  }
+
+  // ── Application forms (Workday and similar): plain text per role ────────
+  // Source: the user's own final resume for this job, else the tailored resume, else the Career profile.
+  function applicationRoles(opp) {
+    const c = career();
+    const mine = opp.docs && opp.docs.myResume && opp.docs.myResume.content;
+    const careerRole = (r) => (c.roles || []).find((x) => normCo(x.company) === normCo(r.company) && String(x.title || '').toLowerCase() === String(r.title || '').toLowerCase())
+      || (c.roles || []).find((x) => normCo(x.company) === normCo(r.company)) || {};
+    if (mine && (mine.roles || []).length) {
+      return { source: 'mine', roles: mine.roles.map((r) => Object.assign({}, r, { location: r.location || careerRole(r).location || '' })) };
+    }
+    const st = opp.docs && opp.docs.resume;
+    if (st && st.items) {
+      const exp = (resumeModel(st).sections.find((x) => x.key === 'experience') || { items: [] }).items;
+      return { source: 'tailored', roles: exp.map((x) => { const cr = (c.roles || []).find((r) => 'role:' + r.id === x.key) || {}; return { title: x.title, company: x.company, location: cr.location || '', start: cr.start, end: cr.end, bullets: x.bullets }; }) };
+    }
+    const roles = [...(c.roles || [])].sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+    return { source: 'profile', roles: roles.map((r) => ({ title: r.title, company: r.company, location: r.location || '', start: r.start, end: r.end,
+      bullets: (c.achievements || []).filter((a) => a.roleId === r.id && (a.kind || 'outcome') === 'outcome').map((a) => a.text) })) };
+  }
+  // Workday-style dates: MM/YYYY; "present" means the "I currently work here" box.
+  function formDate(v) {
+    const s = String(v || '').trim();
+    if (!s || /present|current|now/i.test(s)) return '';
+    const m = s.match(/^(\d{4})(?:-(\d{1,2}))?/);
+    if (m) return (m[2] ? String(m[2]).padStart(2, '0') + '/' : '') + m[1];
+    const d = new Date(s);
+    return isNaN(d) ? s : String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+  // Plain text that survives pasting into a form box: a scope line, then "• " lines, within the limit.
+  function formatRoleText(scope, bullets, limit) {
+    const lines = (bullets || []).map((b) => '• ' + String(b).replace(/^[•\-*\s]+/, '').replace(/\s+/g, ' ').trim()).filter((b) => b.length > 2);
+    let text = [scope ? String(scope).trim() : '', lines.join('\n')].filter(Boolean).join('\n\n');
+    if (limit) {
+      while (text.length > limit && lines.length > 1) { lines.pop(); text = [scope ? String(scope).trim() : '', lines.join('\n')].filter(Boolean).join('\n\n'); }
+      if (text.length > limit) text = text.slice(0, limit - 1).replace(/\s+\S*$/, '') + '…';
+    }
+    return text;
+  }
+  function plainApplication(opp, limit) {
+    const { source, roles } = applicationRoles(opp);
+    return { source, limit, at: core().nowIso(), claude: false, roles: roles.map((r, i) => ({ i, title: r.title || '', company: r.company || '', location: r.location || '',
+      from: formDate(r.start), to: formDate(r.end), current: /present|current|now/i.test(String(r.end || '')) || !r.end, text: formatRoleText('', r.bullets, limit) })) };
+  }
+  async function writeApplication(opp, limit) {
+    const base = plainApplication(opp, limit);
+    const { roles } = applicationRoles(opp);
+    if (!roles.length) throw new Error('No roles to describe yet: add your resume to the Career profile or upload your version.');
+    const system = `You turn an executive's resume into the "role description" text that online application forms (Workday, Taleo, SuccessFactors) ask for under each job in Work Experience.
+
+${core().houseStyle || ''}
+
+Rules:
+- Use ONLY the facts in each role's lines. Never invent scope, numbers, clients or results. Keep their wording where it works; tighten it.
+- For each role: "scope" is one sentence (max 220 characters) saying what the role owned (team, budget, mandate) as far as the lines show it; then "bullets": the strongest results first, each one line, no trailing full stop.
+- Plain text only: no markdown, no bold, no headings.
+- Each role's scope plus bullets must fit in ${limit || 4000} characters when written as: scope, blank line, then one "• " line per bullet.
+- Roles with no lines: scope only, from the title and company.
+Output one JSON object and nothing else: { "roles": [ { "i": 0, "scope": "...", "bullets": ["...", "..."] } ] }`;
+    const user = roles.map((r, i) => `ROLE ${i}: ${r.title || ''} at ${r.company || ''} (${r.start || ''}–${r.end || ''})\n` + (r.bullets || []).map((b) => '- ' + b).join('\n')).join('\n\n');
+    const model = core().modelFor ? core().modelFor('documents') : core().models.parse;
+    const resp = await core().claude(model, system, user.slice(0, 30000), 6000, null, 'documents');
+    const texts = (resp.content || []).filter((b) => b.type === 'text');
+    const d = core().extractJson(texts.length ? texts[texts.length - 1].text : '') || {};
+    const byI = new Map((d.roles || []).map((x) => [+x.i, x]));
+    base.roles.forEach((r) => { const x = byI.get(r.i); if (x) r.text = formatRoleText(x.scope, (x.bullets || []).length ? x.bullets : roles[r.i].bullets, limit); });
+    base.claude = true;
+    return base;
   }
 
   async function draftLetter(opp, opts) {
@@ -406,5 +476,5 @@ Output a single JSON object and nothing else: { "salutation": "Dear ...,", "para
     return { id: r.id, url: r.url, bytes: blob.size };
   }
 
-  window.LU_DOCS = { finalResume, compactFinal, DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
+  window.LU_DOCS = { finalResume, compactFinal, applicationRoles, plainApplication, writeApplication, formatRoleText, formDate, DEFAULT_FORMAT, FONT_PAIRS, CSS_FONT, PALETTE, TEMPLATES, SECTION_KEYS, SECTION_TITLES, normalize, applyTemplate, styleFor, resumeModel, letterModel, tailorResume, draftLetter, buildDocx, createGoogleDoc, fmtMonth };
 })();

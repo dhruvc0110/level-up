@@ -47,7 +47,7 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete, inline, tab, onTab, lis
 
         {/* Overview, then the documents for this job: Outreach, Resume, Cover letter */}
         <div style={{ display: 'flex', gap: 2, padding: '0 28px', borderBottom: '1px solid var(--line-1)', flex: '0 0 auto' }}>
-          {[['overview', 'Overview'], ['outreach', 'Outreach'], ['resume', 'Resume'], ['letter', 'Cover letter']].map(([k, l]) => (
+          {[['overview', 'Overview'], ['outreach', 'Outreach'], ['resume', 'Resume'], ['letter', 'Cover letter'], ['application', 'Application']].map(([k, l]) => (
             <button key={k} onClick={() => setDocTab(k)} style={{
               appearance: 'none', cursor: 'pointer', padding: '10px 12px', fontSize: 13, border: 'none', background: 'transparent',
               color: docTab === k ? 'var(--ink-1)' : 'var(--ink-3)', borderBottom: '2px solid ' + (docTab === k ? 'var(--ink-1)' : 'transparent'),
@@ -76,7 +76,7 @@ function DetailPanel({ opp, onClose, onUpdate, onDelete, inline, tab, onTab, lis
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
             {typeof ResumeWorkspace === 'function'
-              ? (docTab === 'resume' ? <ResumeWorkspace opp={opp} onUpdate={onUpdate}/> : <LetterWorkspace opp={opp} onUpdate={onUpdate}/>)
+              ? (docTab === 'resume' ? <ResumeWorkspace opp={opp} onUpdate={onUpdate}/> : docTab === 'application' ? <ApplicationWorkspace opp={opp} onUpdate={onUpdate}/> : <LetterWorkspace opp={opp} onUpdate={onUpdate}/>)
               : <div style={{ padding: 28, color: 'var(--ink-3)' }}>Refresh the page (Cmd+Shift+R) to load documents.</div>}
             </div>
           </div>

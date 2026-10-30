@@ -162,6 +162,8 @@ const GUIDE_CHAPTERS = [
       <GShot src="resume-pages.jpg" caption="The pages as they'll print: a sub-bullet (–), your own bullet with its toolbar showing, and page 2 starting where you added a break." width={520}/>
       <GH>Your own final version</GH>
       <GP>Rewrote the draft yourself? On the Resume tab, click <B>Upload my version</B> (Word or PDF). Claude reads it and shows what's new for your Career profile; <B>Apply to my profile</B> adds what you approve, <B>Keep as My final only</B> changes nothing. Either way it's saved as <B>✓ My final</B> for this job (the file goes to your Drive), and the Cover letter then drafts from it. <B>Replace</B> or <B>Remove</B> it any time.</GP>
+      <GH>Application forms (Workday and similar)</GH>
+      <GP>The <B>Application</B> tab turns your resume into what a portal's Work Experience section asks for: job title, company, location, From/To dates (MM/YYYY, with “I currently work here” for your current role) and a plain-text <B>role description</B> per job that keeps its bullets when pasted. Choose the description limit (2,000 characters is common), then <B>Write role descriptions</B> (Claude adds a one-line scope summary and keeps the strongest results within the limit; about 1–3¢) or <B>Just reformat my bullets</B> (free). Edit any description, then <B>Copy</B> each field into the portal. It uses <B>My final</B> if you've uploaded one, otherwise the tailored resume, otherwise your Career profile.</GP>
       <GP><B>Cover letter</B> works the same way: <B>Draft with Claude</B> (about 2¢) writes 250–350 words from the job, the company and your strongest proof, in your persona's voice. Edit the paragraphs, revise with an instruction ("shorter", "warmer"), then <B>Create Google Doc</B>. It uses the same header as your resume.</GP>
       <GTip><B>Send PDFs.</B> In the Google Doc use File → Download → PDF: the fonts stay exact. A Word download can look different on a computer without those fonts.</GTip>
       <GTip>School-level education is left off resumes automatically. The page count in the preview is a close estimate; the Google Doc may differ by a line or two.</GTip>
@@ -466,6 +468,7 @@ const GUIDE_CHAPTERS = [
     body: () => <>
       {[
         ['30 Oct 2026', [
+          'New Application tab on each job: copy-ready Work Experience fields for Workday-style portals, with a plain-text role description per job that keeps its bullets and fits the portal\u2019s character limit.',
           'Resume tab: Upload my version (Word or PDF). Level Up offers its new results and wording to your Career profile for approval, keeps it as My final for the job, and drafts the cover letter from it.',
         ]],
         ['21 Oct 2026', [
